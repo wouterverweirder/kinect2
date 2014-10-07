@@ -4,6 +4,8 @@ Nodejs library to access the kinect 2 data from the official MS SDK
 
 Still very early / experimental.
 
+![Screenshot](../../blob/master/node-kinect2-skeleton.png?raw=true)
+
 ```
 var Kinect2 = require('node-kinect2');
 
