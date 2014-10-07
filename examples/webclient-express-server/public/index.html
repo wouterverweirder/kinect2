@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>Node Kinect2 Client</title>
+	<link rel="stylesheet" href="">
+</head>
+<body>
+	<canvas id="bodyCanvas" width="512" height="424"></canvas>
+	<script src="/socket.io/socket.io.js"></script>
+	<script>
+		var socket = io.connect('/');
+		var canvas = document.getElementById('bodyCanvas');
+		var ctx = canvas.getContext('2d');
+		var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
+
+		socket.on('bodyFrame', function(bodies){
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			var index = 0;
+			bodies.forEach(function(body){
+				for(var jointName in body.joints) {
+					var joint = body.joints[jointName];
+					ctx.fillStyle = colors[index];
+					ctx.fillRect(joint.x, joint.y, 10, 10);
+				}
+				index++;
+			});
+		});
+	</script>
+</body>
+</html>
