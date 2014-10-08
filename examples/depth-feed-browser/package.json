@@ -1,7 +1,7 @@
 {
-  "name": "webclient-express-server",
+  "name": "depth-feed-browser",
   "version": "0.0.0",
-  "description": "node-kinect2 demo application with express-server sending data over websockets to a client app",
+  "description": "display depth feed and skeletons in browser",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

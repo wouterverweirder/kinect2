@@ -1,0 +1,15 @@
+{
+  "name": "webclient-express-server",
+  "version": "0.0.0",
+  "description": "show skeletons in browser",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Wouter Verweirder <wouter.verweirder@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "express": "~4.9.5",
+    "socket.io": "~1.1.0"
+  }
+}

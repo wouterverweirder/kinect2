@@ -22,7 +22,9 @@ util.inherits(Kinect2, events.EventEmitter);
 
 Kinect2.prototype.open = function() {
 	return this.edge.open({
-		bodyFrameCallback: this.bodyFrameCallback.bind(this)
+		logCallback: this.logCallback.bind(this),
+		bodyFrameCallback: this.bodyFrameCallback.bind(this),
+		depthFrameCallback: this.depthFrameCallback.bind(this)
 	}, true);
 };
 
@@ -30,8 +32,16 @@ Kinect2.prototype.close = function() {
 	return this.edge.close("", true);
 };
 
+Kinect2.prototype.logCallback = function(msg) {
+	console.log('[Kinect2]', msg);
+};
+
 Kinect2.prototype.bodyFrameCallback = function(input, callback) {
 	this.emit('bodyFrame', input);
+};
+
+Kinect2.prototype.depthFrameCallback = function(data) {
+	this.emit('depthFrame', data);
 };
 
 module.exports = Kinect2;
