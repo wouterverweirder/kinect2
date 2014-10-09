@@ -1,7 +1,5 @@
 // -----------------------------------------------------------------------
-// <copyright file="KinectWorker-1.8.0.js" company="Microsoft">
-//     Copyright (c) Microsoft Corporation.  All rights reserved.
-// </copyright>
+// Inspired by KinectWorker-1.8.0.js from the 1.8 Microsoft SDK.
 // -----------------------------------------------------------------------
 
 (function(){
