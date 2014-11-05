@@ -9,6 +9,41 @@ namespace NodeKinect2
 {
     public class Startup
     {
+
+        private static NodeKinect instance;
+
+        public async Task<object> Invoke(dynamic input)
+        {
+            if (instance == null)
+            {
+                instance = new NodeKinect(input);
+            }
+            return true;
+        }
+
+        public async Task<object> Open(dynamic input)
+        {
+            return instance.Open(input);
+        }
+
+        public async Task<object> OpenDepthReader(dynamic input)
+        {
+            return instance.OpenDepthReader(input);
+        }
+
+        public async Task<object> OpenBodyReader(dynamic input)
+        {
+            return instance.OpenBodyReader(input);
+        }
+
+        public async Task<object> Close(dynamic input)
+        {
+            return instance.Close(input);
+        }
+    }
+
+    public class NodeKinect
+    {
         /// <summary>
         /// Active Kinect sensor
         /// </summary>
@@ -63,38 +98,69 @@ namespace NodeKinect2
         private Func<object, Task<object>> bodyFrameCallback;
         private Func<object, Task<object>> depthFrameCallback;
 
+        public NodeKinect(dynamic input)
+        {
+            this.logCallback = (Func<object, Task<object>>)input.logCallback;
+            this.logCallback("Created NodeKinect Instance");
+        }
+
         public async Task<object> Open(dynamic input)
         {
+            this.logCallback("Open");
             this.kinectSensor = KinectSensor.GetDefault();
-            this.logCallback = (Func<object, Task<object>>)input.logCallback;
-            this.bodyFrameCallback = (Func<object, Task<object>>)input.bodyFrameCallback;
-            this.depthFrameCallback = (Func<object, Task<object>>)input.depthFrameCallback;
+
             if (this.kinectSensor != null)
             {
                 this.coordinateMapper = this.kinectSensor.CoordinateMapper;
                 this.kinectSensor.Open();
-
-                this.depthFrameDescription = this.kinectSensor.DepthFrameSource.FrameDescription;
-                this.displayWidth = this.depthFrameDescription.Width;
-                this.displayHeight = this.depthFrameDescription.Height;
-                this.logCallback("depth: " + this.displayWidth + "x" + this.displayHeight);
-
-                //depth data
-                this.depthFrameReader = this.kinectSensor.DepthFrameSource.OpenReader();
-                this.depthFrameReader.FrameArrived += this.DepthReader_FrameArrived;
-                this.depthPixels = new byte[this.depthFrameDescription.Width * this.depthFrameDescription.Height];
-                
-                //body data
-                this.bodies = new Body[this.kinectSensor.BodyFrameSource.BodyCount];
-                this.bodyFrameReader = this.kinectSensor.BodyFrameSource.OpenReader();
-                this.bodyFrameReader.FrameArrived += this.BodyReader_FrameArrived;
                 return true;
             }
             return false;
         }
 
+        public async Task<object> OpenDepthReader(dynamic input)
+        {
+            this.logCallback("OpenDepthReader");
+            if (this.depthFrameReader != null)
+            {
+                return false;
+            }
+            this.depthFrameCallback = (Func<object, Task<object>>)input.depthFrameCallback;
+
+            this.depthFrameDescription = this.kinectSensor.DepthFrameSource.FrameDescription;
+            this.displayWidth = this.depthFrameDescription.Width;
+            this.displayHeight = this.depthFrameDescription.Height;
+            this.logCallback("depth: " + this.displayWidth + "x" + this.displayHeight);
+
+            //depth data
+            this.depthFrameReader = this.kinectSensor.DepthFrameSource.OpenReader();
+            this.depthFrameReader.FrameArrived += this.DepthReader_FrameArrived;
+            this.depthPixels = new byte[this.depthFrameDescription.Width * this.depthFrameDescription.Height];
+            return true;
+        }
+
+        public async Task<object> OpenBodyReader(dynamic input)
+        {
+            this.logCallback("OpenBodyReader");
+            if (this.bodyFrameReader != null)
+            {
+                return false;
+            }
+            this.bodyFrameCallback = (Func<object, Task<object>>)input.bodyFrameCallback;
+            this.bodies = new Body[this.kinectSensor.BodyFrameSource.BodyCount];
+            this.bodyFrameReader = this.kinectSensor.BodyFrameSource.OpenReader();
+            this.bodyFrameReader.FrameArrived += this.BodyReader_FrameArrived;
+            return true;
+        }
+
         public async Task<object> Close(object input)
         {
+            if (this.depthFrameReader != null)
+            {
+                this.depthFrameReader.Dispose();
+                this.depthFrameReader = null;
+            }
+
             if (this.bodyFrameReader != null)
             {
                 this.bodyFrameReader.Dispose();
@@ -132,7 +198,7 @@ namespace NodeKinect2
                             ushort maxDepth = depthFrame.DepthMaxReliableDistance;
 
                             this.ProcessDepthFrameData(depthBuffer.UnderlyingBuffer, depthBuffer.Size, depthFrame.DepthMinReliableDistance, maxDepth);
-                            
+
                             depthFrameProcessed = true;
                         }
                     }

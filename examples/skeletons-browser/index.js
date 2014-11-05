@@ -18,4 +18,6 @@ if(kinect.open()) {
 	kinect.on('bodyFrame', function(bodies){
 		io.sockets.emit('bodyFrame', bodies);
 	});
+
+	kinect.openBodyReader();
 }

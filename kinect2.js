@@ -1,35 +1,49 @@
 var edge = require('edge'),
 	path = require('path')
 	events = require('events'),
+	_ = require('lodash'),
 	util = require('util');
 
-function Kinect2() {
+function Kinect2(options) {
 	events.EventEmitter.call(this);
+
+	var dllProperties = {
+		assemblyFile: __dirname + path.sep + 'NodeKinect2.dll',
+	    typeName: 'NodeKinect2.Startup'
+	};
+
 	this.edge = {};
-	this.edge.open = edge.func({
-		assemblyFile: __dirname + path.sep + 'NodeKinect2.dll',
-	    typeName: 'NodeKinect2.Startup',
-	    methodName: 'Open'
-	});
-	this.edge.close = edge.func({
-		assemblyFile: __dirname + path.sep + 'NodeKinect2.dll',
-	    typeName: 'NodeKinect2.Startup',
-	    methodName: 'Close'
-	});
+	this.edge.create = edge.func(_.assign({}, dllProperties));
+	this.edge.open = edge.func(_.assign({ methodName: 'Open' }, dllProperties));
+	this.edge.openDepthReader =edge.func( _.assign({ methodName: 'OpenDepthReader' }, dllProperties));
+	this.edge.openBodyReader = edge.func(_.assign({ methodName: 'OpenBodyReader' }, dllProperties));
+	this.edge.close = edge.func(_.assign({ methodName: 'Close' }, dllProperties));
+
+	this.edge.create({
+		logCallback: this.logCallback.bind(this)
+	}, true);
 }
 
 util.inherits(Kinect2, events.EventEmitter);
 
 Kinect2.prototype.open = function() {
-	return this.edge.open({
-		logCallback: this.logCallback.bind(this),
-		bodyFrameCallback: this.bodyFrameCallback.bind(this),
+	return this.edge.open(null, true);
+};
+
+Kinect2.prototype.openDepthReader = function() {
+	return this.edge.openDepthReader({
 		depthFrameCallback: this.depthFrameCallback.bind(this)
 	}, true);
 };
 
+Kinect2.prototype.openBodyReader = function() {
+	return this.edge.openBodyReader({
+		bodyFrameCallback: this.bodyFrameCallback.bind(this)
+	}, true);
+};
+
 Kinect2.prototype.close = function() {
-	return this.edge.close("", true);
+	return this.edge.close(null, true);
 };
 
 Kinect2.prototype.logCallback = function(msg) {

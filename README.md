@@ -7,21 +7,25 @@ Still very early / experimental.
 ![Screenshot](../../blob/master/node-kinect2-skeleton.png?raw=true)
 
 ```
-var Kinect2 = require('node-kinect2');
+var Kinect2 = require('../kinect2');
 
-var kinect2 = new Kinect2();
+var kinect = new Kinect2();
 
-if(kinect2.open()) {
+if(kinect.open()) {
 	console.log("Kinect Opened");
 	//listen for body frames
-	kinect2.on('bodyFrame', function(bodies){
+	kinect.on('bodyFrame', function(bodies){
 		for(var i = 0;  i < bodies.length; i++) {
 			console.log(bodies[i]);
 		}
 	});
+
+	//request body frames
+	kinect.openBodyReader();
+
 	//close the kinect after 5 seconds
 	setTimeout(function(){
-		kinect2.close();
+		kinect.close();
 		console.log("Kinect Closed");
 	}, 5000);
 }
