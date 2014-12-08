@@ -7,7 +7,7 @@ Still very early / experimental.
 ![Screenshot](../../blob/master/node-kinect2-skeleton.png?raw=true)
 
 ```
-var Kinect2 = require('../kinect2');
+var Kinect2 = require('kinect2');
 
 var kinect = new Kinect2();
 

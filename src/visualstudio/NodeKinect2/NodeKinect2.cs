@@ -36,6 +36,11 @@ namespace NodeKinect2
             return instance.OpenBodyReader(input);
         }
 
+        public async Task<object> OpenColorReader(dynamic input)
+        {
+            return instance.OpenColorReader(input);
+        }
+
         public async Task<object> Close(dynamic input)
         {
             return instance.Close(input);
@@ -44,59 +49,33 @@ namespace NodeKinect2
 
     public class NodeKinect
     {
-        /// <summary>
-        /// Active Kinect sensor
-        /// </summary>
         private KinectSensor kinectSensor = null;
 
-        /// <summary>
-        /// Description of the data contained in the depth frame
-        /// </summary>
         private FrameDescription depthFrameDescription = null;
-
-        /// <summary>
-        /// Reader for depth frames
-        /// </summary>
         private DepthFrameReader depthFrameReader = null;
 
         /// <summary>
         /// Map depth range to byte range
         /// </summary>
         private const int MapDepthToByte = 8000 / 256;
-
-        /// <summary>
-        /// Intermediate storage for frame data converted to color
-        /// </summary>
         private byte[] depthPixels = null;
+        private bool processingDepthFrame = false;
 
-        /// <summary>
-        /// Coordinate mapper to map one type of point to another
-        /// </summary>
+        private ColorFrameReader colorFrameReader = null;
+        private FrameDescription colorFrameDescription = null;
+        private byte[] colorPixels = null;
+        private bool processingColorFrame = false;
+
         private CoordinateMapper coordinateMapper = null;
 
-        /// <summary>
-        /// Reader for body frames
-        /// </summary>
         private BodyFrameReader bodyFrameReader = null;
-
-        /// <summary>
-        /// Array for the bodies
-        /// </summary>
         private Body[] bodies = null;
-
-        /// <summary>
-        /// Width of display (depth space)
-        /// </summary>
-        private int displayWidth;
-
-        /// <summary>
-        /// Height of display (depth space)
-        /// </summary>
-        private int displayHeight;
 
         private Func<object, Task<object>> logCallback;
         private Func<object, Task<object>> bodyFrameCallback;
         private Func<object, Task<object>> depthFrameCallback;
+        private Func<object, Task<object>> colorFrameCallback;
+        
 
         public NodeKinect(dynamic input)
         {
@@ -128,14 +107,31 @@ namespace NodeKinect2
             this.depthFrameCallback = (Func<object, Task<object>>)input.depthFrameCallback;
 
             this.depthFrameDescription = this.kinectSensor.DepthFrameSource.FrameDescription;
-            this.displayWidth = this.depthFrameDescription.Width;
-            this.displayHeight = this.depthFrameDescription.Height;
-            this.logCallback("depth: " + this.displayWidth + "x" + this.displayHeight);
+            this.logCallback("depth: " + this.depthFrameDescription.Width + "x" + this.depthFrameDescription.Height);
 
             //depth data
             this.depthFrameReader = this.kinectSensor.DepthFrameSource.OpenReader();
             this.depthFrameReader.FrameArrived += this.DepthReader_FrameArrived;
             this.depthPixels = new byte[this.depthFrameDescription.Width * this.depthFrameDescription.Height];
+            return true;
+        }
+
+        public async Task<object> OpenColorReader(dynamic input)
+        {
+            this.logCallback("OpenColorReader");
+            if (this.colorFrameReader != null)
+            {
+                return false;
+            }
+            this.colorFrameCallback = (Func<object, Task<object>>)input.colorFrameCallback;
+
+            this.colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Rgba);
+            this.logCallback("color: " + this.colorFrameDescription.Width + "x" + this.colorFrameDescription.Height);
+
+            this.colorFrameReader = this.kinectSensor.ColorFrameSource.OpenReader();
+            this.colorFrameReader.FrameArrived += this.ColorReader_ColorFrameArrived;
+            this.colorPixels = new byte[4 * this.colorFrameDescription.Width * this.colorFrameDescription.Height];
+
             return true;
         }
 
@@ -161,6 +157,12 @@ namespace NodeKinect2
                 this.depthFrameReader = null;
             }
 
+            if (this.colorFrameReader != null)
+            {
+                this.colorFrameReader.Dispose();
+                this.colorFrameReader = null;
+            }
+
             if (this.bodyFrameReader != null)
             {
                 this.bodyFrameReader.Dispose();
@@ -177,6 +179,11 @@ namespace NodeKinect2
 
         private void DepthReader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
         {
+            if (this.processingDepthFrame)
+            {
+                return;
+            }
+            this.processingDepthFrame = true;
             bool depthFrameProcessed = false;
 
             using (DepthFrame depthFrame = e.FrameReference.AcquireFrame())
@@ -210,6 +217,7 @@ namespace NodeKinect2
                 this.depthFrameCallback(this.depthPixels);
                 //this.RenderDepthPixels();
             }
+            this.processingDepthFrame = false;
         }
 
         /// <summary>
@@ -237,6 +245,35 @@ namespace NodeKinect2
                 // Values outside the reliable depth range are mapped to 0 (black).
                 this.depthPixels[i] = (byte)(depth >= minDepth && depth <= maxDepth ? (depth / MapDepthToByte) : 0);
             }
+        }
+
+        private void ColorReader_ColorFrameArrived(object sender, ColorFrameArrivedEventArgs e)
+        {
+            if (this.processingColorFrame)
+            {
+                return;
+            }
+            this.processingColorFrame = true;
+            bool colorFrameProcessed = false;
+            // ColorFrame is IDisposable
+            using (ColorFrame colorFrame = e.FrameReference.AcquireFrame())
+            {
+                if (colorFrame != null)
+                {
+                    FrameDescription colorFrameDescription = colorFrame.FrameDescription;
+
+                    using (KinectBuffer colorBuffer = colorFrame.LockRawImageBuffer())
+                    {
+                        colorFrame.CopyConvertedFrameDataToArray(this.colorPixels, ColorImageFormat.Rgba);
+                        colorFrameProcessed = true;
+                    }
+                }
+            }
+            if (colorFrameProcessed)
+            {
+                this.colorFrameCallback(this.colorPixels);
+            }
+            this.processingColorFrame = false;
         }
 
         private void BodyReader_FrameArrived(object sender, BodyFrameArrivedEventArgs e)
