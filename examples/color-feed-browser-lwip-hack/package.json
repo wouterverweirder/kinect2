@@ -1,0 +1,16 @@
+{
+  "name": "color-feed-browser-lwip-hack",
+  "version": "0.0.0",
+  "description": "display color feed in browser, uses lwip library to do image processing",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Wouter Verweirder <wouter.verweirder@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "express": "~4.9.5",
+    "lwip": "0.0.5",
+    "socket.io": "~1.1.0"
+  }
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>Node Kinect2 Client</title>
+	<link rel="stylesheet" href="">
+</head>
+<body>
+	<img id="colorImage" />
+	<script src="/socket.io/socket.io.js"></script>
+	<script src="js/colorWorker.js"></script>
+	<script>
+		var socket = io.connect('/');
+		var img = document.getElementById('colorImage');
+
+		var colorProcessing = false;
+		var colorWorkerThread = new Worker("js/colorWorker.js");
+		
+		colorWorkerThread.addEventListener("message", function (event) {
+			if(event.data.message === 'jpgReady') {
+				img.src = 'data:image/jpeg;base64,' + event.data.jpgData;
+                colorProcessing = false;
+			}
+		});
+
+		colorWorkerThread.postMessage({
+			"message": "setImageData"
+		});
+
+		socket.on('colorFrame', function(imageBuffer){
+			if(!colorProcessing) {
+				colorProcessing = true;
+				colorWorkerThread.postMessage({ "message": "processImageData", "imageBuffer": imageBuffer });
+			}
+		});
+	</script>
+</body>
+</html>
