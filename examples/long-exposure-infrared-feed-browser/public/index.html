@@ -30,7 +30,7 @@
 			"imageData": ctx.createImageData(canvas.width, canvas.height)
 		});
 
-		socket.on('depthFrame', function(imageBuffer){
+		socket.on('longExposureInfraredFrame', function(imageBuffer){
 			if(!imageProcessing) {
 				imageProcessing = true;
 				imageWorkerThread.postMessage({ "message": "processImageData", "imageBuffer": imageBuffer });

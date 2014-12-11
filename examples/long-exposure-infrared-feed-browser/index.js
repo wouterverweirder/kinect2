@@ -17,9 +17,9 @@ if(kinect.open()) {
 
 	app.use(express.static(__dirname + '/public'));
 
-	kinect.on('depthFrame', function(data){
-		io.sockets.emit('depthFrame', data);
+	kinect.on('longExposureInfraredFrame', function(data){
+		io.sockets.emit('longExposureInfraredFrame', data);
 	});
 
-	kinect.openDepthReader();
+	kinect.openLongExposureInfraredReader();
 }

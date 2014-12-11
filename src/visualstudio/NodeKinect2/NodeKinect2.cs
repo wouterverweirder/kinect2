@@ -41,6 +41,16 @@ namespace NodeKinect2
             return instance.OpenColorReader(input);
         }
 
+        public async Task<object> OpenInfraredReader(dynamic input)
+        {
+            return instance.OpenInfraredReader(input);
+        }
+
+        public async Task<object> OpenLongExposureInfraredReader(dynamic input)
+        {
+            return instance.OpenLongExposureInfraredReader(input);
+        }
+
         public async Task<object> Close(dynamic input)
         {
             return instance.Close(input);
@@ -66,6 +76,36 @@ namespace NodeKinect2
         private byte[] colorPixels = null;
         private bool processingColorFrame = false;
 
+        private InfraredFrameReader infraredFrameReader = null;
+        private FrameDescription infraredFrameDescription = null;
+        private byte[] infraredPixels = null;
+        private bool processingInfraredFrame = false;
+
+        private LongExposureInfraredFrameReader longExposureInfraredFrameReader = null;
+        private FrameDescription longExposureInfraredFrameDescription = null;
+        private byte[] longExposureInfraredPixels = null;
+        private bool processingLongExposureInfraredFrame = false;
+
+        /// <summary>
+        /// Maximum value (as a float) that can be returned by the InfraredFrame
+        /// </summary>
+        private const float InfraredSourceValueMaximum = (float)ushort.MaxValue;
+
+        /// <summary>
+        /// The value by which the infrared source data will be scaled
+        /// </summary>
+        private const float InfraredSourceScale = 0.75f;
+
+        /// <summary>
+        /// Smallest value to display when the infrared data is normalized
+        /// </summary>
+        private const float InfraredOutputValueMinimum = 0.01f;
+
+        /// <summary>
+        /// Largest value to display when the infrared data is normalized
+        /// </summary>
+        private const float InfraredOutputValueMaximum = 1.0f;
+
         private CoordinateMapper coordinateMapper = null;
 
         private BodyFrameReader bodyFrameReader = null;
@@ -75,6 +115,8 @@ namespace NodeKinect2
         private Func<object, Task<object>> bodyFrameCallback;
         private Func<object, Task<object>> depthFrameCallback;
         private Func<object, Task<object>> colorFrameCallback;
+        private Func<object, Task<object>> infraredFrameCallback;
+        private Func<object, Task<object>> longExposureInfraredFrameCallback;
         
 
         public NodeKinect(dynamic input)
@@ -135,6 +177,44 @@ namespace NodeKinect2
             return true;
         }
 
+        public async Task<object> OpenInfraredReader(dynamic input)
+        {
+            this.logCallback("OpenInfraredReader");
+            if (this.infraredFrameReader != null)
+            {
+                return false;
+            }
+            this.infraredFrameCallback = (Func<object, Task<object>>)input.infraredFrameCallback;
+
+            this.infraredFrameDescription = this.kinectSensor.InfraredFrameSource.FrameDescription;
+            this.logCallback("infrared: " + this.infraredFrameDescription.Width + "x" + this.infraredFrameDescription.Height);
+
+            //depth data
+            this.infraredFrameReader = this.kinectSensor.InfraredFrameSource.OpenReader();
+            this.infraredFrameReader.FrameArrived += this.InfraredReader_FrameArrived;
+            this.infraredPixels = new byte[this.infraredFrameDescription.Width * this.infraredFrameDescription.Height];
+            return true;
+        }
+
+        public async Task<object> OpenLongExposureInfraredReader(dynamic input)
+        {
+            this.logCallback("OpenLongExposureInfraredReader");
+            if (this.longExposureInfraredFrameReader != null)
+            {
+                return false;
+            }
+            this.longExposureInfraredFrameCallback = (Func<object, Task<object>>)input.longExposureInfraredFrameCallback;
+
+            this.longExposureInfraredFrameDescription = this.kinectSensor.LongExposureInfraredFrameSource.FrameDescription;
+            this.logCallback("longExposureInfrared: " + this.longExposureInfraredFrameDescription.Width + "x" + this.longExposureInfraredFrameDescription.Height);
+
+            //depth data
+            this.longExposureInfraredFrameReader = this.kinectSensor.LongExposureInfraredFrameSource.OpenReader();
+            this.longExposureInfraredFrameReader.FrameArrived += this.LongExposureInfraredReader_FrameArrived;
+            this.longExposureInfraredPixels = new byte[this.longExposureInfraredFrameDescription.Width * this.longExposureInfraredFrameDescription.Height];
+            return true;
+        }
+
         public async Task<object> OpenBodyReader(dynamic input)
         {
             this.logCallback("OpenBodyReader");
@@ -161,6 +241,18 @@ namespace NodeKinect2
             {
                 this.colorFrameReader.Dispose();
                 this.colorFrameReader = null;
+            }
+
+            if (this.infraredFrameReader != null)
+            {
+                this.infraredFrameReader.Dispose();
+                this.infraredFrameReader = null;
+            }
+
+            if (this.longExposureInfraredFrameReader != null)
+            {
+                this.longExposureInfraredFrameReader.Dispose();
+                this.longExposureInfraredFrameReader = null;
             }
 
             if (this.bodyFrameReader != null)
@@ -274,6 +366,92 @@ namespace NodeKinect2
                 this.colorFrameCallback(this.colorPixels);
             }
             this.processingColorFrame = false;
+        }
+
+        private void InfraredReader_FrameArrived(object sender, InfraredFrameArrivedEventArgs e)
+        {
+            if (this.processingInfraredFrame)
+            {
+                return;
+            }
+            this.processingInfraredFrame = true;
+            bool infraredFrameProcessed = false;
+
+            using (InfraredFrame infraredFrame = e.FrameReference.AcquireFrame())
+            {
+                if (infraredFrame != null)
+                {
+                    // the fastest way to process the body index data is to directly access 
+                    // the underlying buffer
+                    using (Microsoft.Kinect.KinectBuffer infraredBuffer = infraredFrame.LockImageBuffer())
+                    {
+                        // verify data and write the color data to the display bitmap
+                        if (((this.infraredFrameDescription.Width * this.infraredFrameDescription.Height) == (infraredBuffer.Size / this.infraredFrameDescription.BytesPerPixel)))
+                        {
+                            this.ProcessInfraredFrameData(infraredBuffer.UnderlyingBuffer, infraredBuffer.Size, this.infraredFrameDescription.BytesPerPixel);
+                            infraredFrameProcessed = true;
+                        }
+                    }
+                }
+            }
+
+            if (infraredFrameProcessed)
+            {
+                this.infraredFrameCallback(this.infraredPixels);
+            }
+            this.processingInfraredFrame = false;
+        }
+
+        private void LongExposureInfraredReader_FrameArrived(object sender, LongExposureInfraredFrameArrivedEventArgs e)
+        {
+            if (this.processingLongExposureInfraredFrame)
+            {
+                return;
+            }
+            this.processingLongExposureInfraredFrame = true;
+            bool longExposureInfraredFrameProcessed = false;
+
+            using (LongExposureInfraredFrame longExposureInfraredFrame = e.FrameReference.AcquireFrame())
+            {
+                if (longExposureInfraredFrame != null)
+                {
+                    using (Microsoft.Kinect.KinectBuffer longExposureInfraredBuffer = longExposureInfraredFrame.LockImageBuffer())
+                    {
+                        // verify data and write the color data to the display bitmap
+                        if (((this.longExposureInfraredFrameDescription.Width * this.longExposureInfraredFrameDescription.Height) == (longExposureInfraredBuffer.Size / this.longExposureInfraredFrameDescription.BytesPerPixel)))
+                        {
+                            this.ProcessLongExposureInfraredFrameData(longExposureInfraredBuffer.UnderlyingBuffer, longExposureInfraredBuffer.Size, this.longExposureInfraredFrameDescription.BytesPerPixel);
+                            longExposureInfraredFrameProcessed = true;
+                        }
+                    }
+                }
+            }
+
+            if (longExposureInfraredFrameProcessed)
+            {
+                this.longExposureInfraredFrameCallback(this.longExposureInfraredPixels);
+            }
+            this.processingLongExposureInfraredFrame = false;
+        }
+
+        private unsafe void ProcessInfraredFrameData(IntPtr frameData, uint frameDataSize, uint bytesPerPixel)
+        {
+            ushort* lframeData = (ushort*)frameData;
+            int len = (int)(frameDataSize / bytesPerPixel);
+            for (int i = 0; i < len; ++i)
+            {
+                this.infraredPixels[i] = (byte) (0xff * Math.Min(InfraredOutputValueMaximum, (((float)lframeData[i] / InfraredSourceValueMaximum * InfraredSourceScale) * (1.0f - InfraredOutputValueMinimum)) + InfraredOutputValueMinimum));
+            }
+        }
+
+        private unsafe void ProcessLongExposureInfraredFrameData(IntPtr frameData, uint frameDataSize, uint bytesPerPixel)
+        {
+            ushort* lframeData = (ushort*)frameData;
+            int len = (int)(frameDataSize / bytesPerPixel);
+            for (int i = 0; i < len; ++i)
+            {
+                this.longExposureInfraredPixels[i] = (byte)(0xff * Math.Min(InfraredOutputValueMaximum, (((float)lframeData[i] / InfraredSourceValueMaximum * InfraredSourceScale) * (1.0f - InfraredOutputValueMinimum)) + InfraredOutputValueMinimum));
+            }
         }
 
         private void BodyReader_FrameArrived(object sender, BodyFrameArrivedEventArgs e)

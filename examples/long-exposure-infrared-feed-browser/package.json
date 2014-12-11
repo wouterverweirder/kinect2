@@ -1,7 +1,7 @@
 {
-  "name": "depth-feed-browser",
+  "name": "infrared-feed-browser",
   "version": "0.0.0",
-  "description": "display depth feed in browser",
+  "description": "display long exposure infrared feed in browser",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
