@@ -7,7 +7,7 @@ Still very early / experimental.
 ![Screenshot](https://raw.githubusercontent.com/wouterverweirder/node-kinect2/master/node-kinect2-skeleton.png)
 
 ```
-var Kinect2 = require('node-kinect2');
+var Kinect2 = require('kinect2');
 
 var kinect = new Kinect2();
 
