@@ -4,6 +4,8 @@
 
 (function(){
 
+    importScripts('pako.inflate.min.js'); 
+
     var imageData;
 
     function init() {
@@ -19,7 +21,8 @@
         });
     }
 
-    function processImageData(imageBuffer) {
+    function processImageData(compressedData) {
+        var imageBuffer = pako.inflate(atob(compressedData));
         var pixelArray = imageData.data;
         var newPixelData = new Uint8Array(imageBuffer);
         var depthPixelIndex = 0;

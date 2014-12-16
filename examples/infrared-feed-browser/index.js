@@ -2,7 +2,8 @@ var Kinect2 = require('../../kinect2'),
 	express = require('express'),
 	app = express(),
 	server = require('http').createServer(app),
-	io = require('socket.io').listen(server);
+	io = require('socket.io').listen(server),
+	zlib = require('zlib');
 
 var kinect = new Kinect2();
 
@@ -17,8 +18,18 @@ if(kinect.open()) {
 
 	app.use(express.static(__dirname + '/public'));
 
+	var compressing = false;
 	kinect.on('infraredFrame', function(data){
-		io.sockets.emit('infraredFrame', data);
+		//compress the infrared data using zlib
+		if(!compressing) {
+			compressing = true;
+			zlib.deflate(data, function(err, result){
+				if(!err) {
+					io.sockets.emit('infraredFrame', result.toString('base64'));
+				}
+				compressing = false;
+			});
+		}
 	});
 
 	kinect.openInfraredReader();
