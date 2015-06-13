@@ -21,7 +21,7 @@
   },
   "homepage": "https://github.com/wouterverweirder/kinect2",
   "dependencies": {
-    "edge": "~0.9.3",
-    "lodash": "^2.4.1"
+    "edge": "latest",
+    "lodash": "latest"
   }
 }
