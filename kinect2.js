@@ -18,6 +18,7 @@ Kinect2.prototype.openDepthReader = function() {
 };
 
 Kinect2.prototype.openColorReader = function() {
+	return this.nativeKinect2.openColorReader(this.colorFrameCallback.bind(this));
 };
 
 Kinect2.prototype.openInfraredReader = function() {
