@@ -2,34 +2,21 @@
 #include <iostream>
 #include "uv.h"
 #include "Kinect.h"
+#include "Structs.h"
 
 using namespace v8;
 
 IKinectSensor*		m_pKinectSensor;
 ICoordinateMapper*	m_pCoordinateMapper;
 IBodyFrameReader*	m_pBodyFrameReader;
+IDepthFrameReader*	m_pDepthFrameReader;
+
+const int 			cDepthWidth  = 512;
+const int 			cDepthHeight = 424;
+char*				m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
 
 NanCallback*		m_pBodyReaderCallback;
-
-typedef struct _JSJoint
-{
-	float x;
-	float y;
-	int jointType;
-} JSJoint;
-
-typedef struct _JSBody
-{
-	bool tracked;
-	UINT64 trackingId;
-	JSJoint joints[JointType_Count];
-} JSBody;
-
-typedef struct _JSBodyFrame
-{
-	INT64 timestamp;
-	JSBody bodies[BODY_COUNT];
-} JSBodyFrame;
+NanCallback*		m_pDepthReaderCallback;
 
 // Safe release for interfaces
 template<class Interface>
@@ -172,6 +159,117 @@ class BodyFrameWorker : public NanAsyncWorker
 	private:
 };
 
+class DepthFrameWorker : public NanAsyncWorker
+{
+	public:
+	DepthFrameWorker(NanCallback *callback) : NanAsyncWorker(callback)
+	{
+	}
+	~DepthFrameWorker()
+	{
+	}
+
+	// Executed inside the worker-thread.
+	// It is not safe to access V8, or V8 data structures
+	// here, so everything we need for input and output
+	// should go on `this`.
+	void Execute ()
+	{
+		IDepthFrame* pDepthFrame = NULL;
+		IFrameDescription* pFrameDescription = NULL;
+		int nWidth = 0;
+		int nHeight = 0;
+		USHORT nDepthMinReliableDistance = 0;
+		USHORT nDepthMaxDistance = 0;
+		UINT nBufferSize = 0;
+		UINT16 *pBuffer = NULL;
+
+		int mapDepthToByte = 8000 / 256;
+
+		HRESULT hr;
+		bool frameReadSucceeded = false;
+		do
+		{
+			hr = m_pDepthFrameReader->AcquireLatestFrame(&pDepthFrame);
+
+			if (SUCCEEDED(hr))
+			{
+				hr = pDepthFrame->get_FrameDescription(&pFrameDescription);
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				hr = pFrameDescription->get_Width(&nWidth);
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				hr = pFrameDescription->get_Height(&nHeight);
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				hr = pDepthFrame->get_DepthMinReliableDistance(&nDepthMinReliableDistance);
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				hr = pDepthFrame->get_DepthMaxReliableDistance(&nDepthMaxDistance);
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				hr = pDepthFrame->AccessUnderlyingBuffer(&nBufferSize, &pBuffer);            
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				frameReadSucceeded = true;
+				mapDepthToByte = nDepthMaxDistance / 256;
+				if (m_pDepthPixels && pBuffer && (nWidth == cDepthWidth) && (nHeight == cDepthHeight))
+				{
+					char* pDepthPixel = m_pDepthPixels;
+
+					// end pixel is start + width*height - 1
+					const UINT16* pBufferEnd = pBuffer + (nWidth * nHeight);
+
+					while (pBuffer < pBufferEnd)
+					{
+						USHORT depth = *pBuffer;
+
+						BYTE intensity = static_cast<BYTE>(depth >= nDepthMinReliableDistance && depth <= nDepthMaxDistance ? (depth / mapDepthToByte) : 0);
+						*pDepthPixel = intensity;
+
+						++pDepthPixel;
+						++pBuffer;
+					}
+				}
+			}
+
+			SafeRelease(pFrameDescription);
+		}
+		while(!frameReadSucceeded);
+
+		SafeRelease(pDepthFrame);
+	}
+
+	// Executed when the async work is complete
+	// this function will be run inside the main event loop
+	// so it is safe to use V8 again
+	void HandleOKCallback ()
+	{
+		NanScope();
+
+		Local<Value> argv[] = {
+			NanNewBufferHandle(m_pDepthPixels, cDepthWidth * cDepthHeight)
+		};
+
+		callback->Call(1, argv);
+	};
+
+	private:
+};
+
 NAN_METHOD(OpenFunction)
 {
 	NanScope();
@@ -248,7 +346,6 @@ NAN_METHOD(OpenBodyReaderFunction)
 		m_pBodyReaderCallback = NULL;
 	}
 
-	//TODO: make API compatible - args should be one object
 	m_pBodyReaderCallback = new NanCallback(args[0].As<Function>());
 
 	HRESULT hr;
@@ -276,6 +373,59 @@ NAN_METHOD(OpenBodyReaderFunction)
 	NanReturnValue(NanTrue());
 }
 
+NAN_METHOD(_DepthFrameArrived)
+{
+	NanScope();
+	if(m_pDepthReaderCallback != NULL)
+	{
+		Local<Value> argv[] = {
+			args[0].As<Object>()
+		};
+		m_pDepthReaderCallback->Call(1, argv);
+	}
+	if(m_pDepthFrameReader != NULL)
+	{
+		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
+		NanAsyncQueueWorker(new DepthFrameWorker(callback));
+	}
+}
+
+NAN_METHOD(OpenDepthReaderFunction) 
+{
+	NanScope();
+
+	if(m_pDepthReaderCallback)
+	{
+		m_pDepthReaderCallback = NULL;
+	}
+
+	m_pDepthReaderCallback = new NanCallback(args[0].As<Function>());
+
+	HRESULT hr;
+	IDepthFrameSource* pDepthFrameSource = NULL;
+
+	hr = m_pKinectSensor->get_DepthFrameSource(&pDepthFrameSource);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrameSource->OpenReader(&m_pDepthFrameReader);
+		if (SUCCEEDED(hr))
+		{
+			//start async worker
+			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
+			NanAsyncQueueWorker(new DepthFrameWorker(callback));
+		}
+	}
+	else
+	{
+		NanReturnValue(NanFalse());
+	}
+
+	SafeRelease(pDepthFrameSource);
+
+	NanReturnValue(NanTrue());
+}
+
 void Init(Handle<Object> exports)
 {
 	exports->Set(NanNew<String>("open"),
@@ -284,6 +434,8 @@ void Init(Handle<Object> exports)
 		NanNew<FunctionTemplate>(CloseFunction)->GetFunction());
 	exports->Set(NanNew<String>("openBodyReader"),
 		NanNew<FunctionTemplate>(OpenBodyReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("openDepthReader"),
+		NanNew<FunctionTemplate>(OpenDepthReaderFunction)->GetFunction());
 }
 
 NODE_MODULE(kinect2, Init)
