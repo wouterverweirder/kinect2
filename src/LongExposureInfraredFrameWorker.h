@@ -1,23 +1,23 @@
-#ifndef Kinect2_InfraredFrameWorker_h
-#define Kinect2_InfraredFrameWorker_h
+#ifndef Kinect2_LongExposureInfraredFrameWorker_h
+#define Kinect2_LongExposureInfraredFrameWorker_h
 
 #include <nan.h>
 #include "Kinect.h"
 #include "Globals.h"
 #include "Structs.h"
 
-class InfraredFrameWorker : public NanAsyncWorker
+class LongExposureInfraredFrameWorker : public NanAsyncWorker
 {
 	public:
-	IInfraredFrameReader*	m_pInfraredFrameReader;
-	char*					m_pInfraredPixels;
-	int 					m_cInfraredWidth;
-	int 					m_cInfraredHeight;
-	InfraredFrameWorker(NanCallback *callback, IInfraredFrameReader *pInfraredFrameReader, char *pInfraredPixels, int cInfraredWidth, int cInfraredHeight)
+	ILongExposureInfraredFrameReader*	m_pInfraredFrameReader;
+	char*								m_pInfraredPixels;
+	int 								m_cInfraredWidth;
+	int 								m_cInfraredHeight;
+	LongExposureInfraredFrameWorker(NanCallback *callback, ILongExposureInfraredFrameReader *pInfraredFrameReader, char *pInfraredPixels, int cInfraredWidth, int cInfraredHeight)
 		: NanAsyncWorker(callback), m_pInfraredFrameReader(pInfraredFrameReader), m_pInfraredPixels(pInfraredPixels), m_cInfraredWidth(cInfraredWidth), m_cInfraredHeight(cInfraredHeight)
 	{
 	}
-	~InfraredFrameWorker()
+	~LongExposureInfraredFrameWorker()
 	{
 	}
 
@@ -27,7 +27,7 @@ class InfraredFrameWorker : public NanAsyncWorker
 	// should go on `this`.
 	void Execute ()
 	{
-		IInfraredFrame* pInfraredFrame = NULL;
+		ILongExposureInfraredFrame* pInfraredFrame = NULL;
         IFrameDescription* pFrameDescription = NULL;
         int nWidth = 0;
         int nHeight = 0;

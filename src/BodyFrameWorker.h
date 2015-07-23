@@ -3,7 +3,7 @@
 
 #include <nan.h>
 #include "Kinect.h"
-#include "Utils.h"
+#include "Globals.h"
 #include "Structs.h"
 
 class BodyFrameWorker : public NanAsyncWorker

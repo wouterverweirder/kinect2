@@ -2,38 +2,45 @@
 #include <iostream>
 #include "uv.h"
 #include "Kinect.h"
-#include "Utils.h"
+#include "Globals.h"
 #include "Structs.h"
 #include "BodyFrameWorker.h"
 #include "DepthFrameWorker.h"
 #include "ColorFrameWorker.h"
 #include "InfraredFrameWorker.h"
+#include "LongExposureInfraredFrameWorker.h"
 
 using namespace v8;
 
-IKinectSensor*			m_pKinectSensor;
-ICoordinateMapper*		m_pCoordinateMapper;
-IBodyFrameReader*		m_pBodyFrameReader;
-IDepthFrameReader*		m_pDepthFrameReader;
-IColorFrameReader*  	m_pColorFrameReader;
-IInfraredFrameReader* 	m_pInfraredFrameReader;
+IKinectSensor*						m_pKinectSensor;
+ICoordinateMapper*					m_pCoordinateMapper;
+IBodyFrameReader*					m_pBodyFrameReader;
+IDepthFrameReader*					m_pDepthFrameReader;
+IColorFrameReader*  				m_pColorFrameReader;
+IInfraredFrameReader* 				m_pInfraredFrameReader;
+ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader;
 
-const int 				cDepthWidth  = 512;
-const int 				cDepthHeight = 424;
-char*					m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
+const int 							cDepthWidth  = 512;
+const int 							cDepthHeight = 424;
+char*								m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
 
-const int 				cColorWidth  = 1920;
-const int 				cColorHeight = 1080;
-RGBQUAD*				m_pColorRGBX = new RGBQUAD[cColorWidth * cColorHeight];
+const int 							cColorWidth  = 1920;
+const int 							cColorHeight = 1080;
+RGBQUAD*							m_pColorRGBX = new RGBQUAD[cColorWidth * cColorHeight];
 
-const int 				cInfraredWidth  = 512;
-const int 				cInfraredHeight = 424;
-char*					m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
+const int 							cInfraredWidth  = 512;
+const int 							cInfraredHeight = 424;
+char*								m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
 
-NanCallback*			m_pBodyReaderCallback;
-NanCallback*			m_pDepthReaderCallback;
-NanCallback*			m_pColorReaderCallback;
-NanCallback*			m_pInfraredReaderCallback;
+const int 							cLongExposureInfraredWidth  = 512;
+const int 							cLongExposureInfraredHeight = 424;
+char*								m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
+
+NanCallback*						m_pBodyReaderCallback;
+NanCallback*						m_pDepthReaderCallback;
+NanCallback*						m_pColorReaderCallback;
+NanCallback*						m_pInfraredReaderCallback;
+NanCallback*						m_pLongExposureInfraredReaderCallback;
 
 NAN_METHOD(OpenFunction);
 NAN_METHOD(CloseFunction);
@@ -45,6 +52,8 @@ NAN_METHOD(OpenColorReaderFunction);
 NAN_METHOD(_ColorFrameArrived);
 NAN_METHOD(OpenInfraredReaderFunction);
 NAN_METHOD(_InfraredFrameArrived);
+NAN_METHOD(OpenLongExposureInfraredReaderFunction);
+NAN_METHOD(_LongExposureInfraredFrameArrived);
 
 NAN_METHOD(OpenFunction)
 {
@@ -308,6 +317,59 @@ NAN_METHOD(_InfraredFrameArrived)
 	}
 }
 
+NAN_METHOD(OpenLongExposureInfraredReaderFunction) 
+{
+	NanScope();
+
+	if(m_pLongExposureInfraredReaderCallback)
+	{
+		m_pLongExposureInfraredReaderCallback = NULL;
+	}
+
+	m_pLongExposureInfraredReaderCallback = new NanCallback(args[0].As<Function>());
+
+	HRESULT hr;
+	ILongExposureInfraredFrameSource* pLongExposureInfraredFrameSource = NULL;
+
+	hr = m_pKinectSensor->get_LongExposureInfraredFrameSource(&pLongExposureInfraredFrameSource);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pLongExposureInfraredFrameSource->OpenReader(&m_pLongExposureInfraredFrameReader);
+		if (SUCCEEDED(hr))
+		{
+			//start async worker
+			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_LongExposureInfraredFrameArrived)->GetFunction());
+			NanAsyncQueueWorker(new LongExposureInfraredFrameWorker(callback, m_pLongExposureInfraredFrameReader, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth, cLongExposureInfraredHeight));
+		}
+	}
+	else
+	{
+		NanReturnValue(NanFalse());
+	}
+
+	SafeRelease(pLongExposureInfraredFrameSource);
+
+	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(_LongExposureInfraredFrameArrived)
+{
+	NanScope();
+	if(m_pLongExposureInfraredReaderCallback != NULL)
+	{
+		Local<Value> argv[] = {
+			args[0].As<Object>()
+		};
+		m_pLongExposureInfraredReaderCallback->Call(1, argv);
+	}
+	if(m_pLongExposureInfraredFrameReader != NULL)
+	{
+		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_LongExposureInfraredFrameArrived)->GetFunction());
+		NanAsyncQueueWorker(new LongExposureInfraredFrameWorker(callback, m_pLongExposureInfraredFrameReader, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth, cLongExposureInfraredHeight));
+	}
+}
+
 void Init(Handle<Object> exports)
 {
 	exports->Set(NanNew<String>("open"),
@@ -322,6 +384,8 @@ void Init(Handle<Object> exports)
 		NanNew<FunctionTemplate>(OpenColorReaderFunction)->GetFunction());
 	exports->Set(NanNew<String>("openInfraredReader"),
 		NanNew<FunctionTemplate>(OpenInfraredReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("openLongExposureInfraredReader"),
+		NanNew<FunctionTemplate>(OpenLongExposureInfraredReaderFunction)->GetFunction());
 }
 
 NODE_MODULE(kinect2, Init)

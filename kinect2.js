@@ -26,6 +26,7 @@ Kinect2.prototype.openInfraredReader = function() {
 };
 
 Kinect2.prototype.openLongExposureInfraredReader = function() {
+	return this.nativeKinect2.openLongExposureInfraredReader(this.longExposureInfraredFrameCallback.bind(this));
 };
 
 Kinect2.prototype.openBodyReader = function() {
