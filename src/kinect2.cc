@@ -2,377 +2,49 @@
 #include <iostream>
 #include "uv.h"
 #include "Kinect.h"
+#include "Utils.h"
 #include "Structs.h"
+#include "BodyFrameWorker.h"
+#include "DepthFrameWorker.h"
+#include "ColorFrameWorker.h"
+#include "InfraredFrameWorker.h"
 
 using namespace v8;
 
-IKinectSensor*		m_pKinectSensor;
-ICoordinateMapper*	m_pCoordinateMapper;
-IBodyFrameReader*	m_pBodyFrameReader;
-IDepthFrameReader*	m_pDepthFrameReader;
-IColorFrameReader*  m_pColorFrameReader;
+IKinectSensor*			m_pKinectSensor;
+ICoordinateMapper*		m_pCoordinateMapper;
+IBodyFrameReader*		m_pBodyFrameReader;
+IDepthFrameReader*		m_pDepthFrameReader;
+IColorFrameReader*  	m_pColorFrameReader;
+IInfraredFrameReader* 	m_pInfraredFrameReader;
 
-const int 			cDepthWidth  = 512;
-const int 			cDepthHeight = 424;
-char*				m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
+const int 				cDepthWidth  = 512;
+const int 				cDepthHeight = 424;
+char*					m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
 
-const int 			cColorWidth  = 1920;
-const int 			cColorHeight = 1080;
-RGBQUAD*			m_pColorRGBX = new RGBQUAD[cColorWidth * cColorHeight];
+const int 				cColorWidth  = 1920;
+const int 				cColorHeight = 1080;
+RGBQUAD*				m_pColorRGBX = new RGBQUAD[cColorWidth * cColorHeight];
 
-NanCallback*		m_pBodyReaderCallback;
-NanCallback*		m_pDepthReaderCallback;
-NanCallback*		m_pColorReaderCallback;
+const int 				cInfraredWidth  = 512;
+const int 				cInfraredHeight = 424;
+char*					m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
 
-// Safe release for interfaces
-template<class Interface>
-inline void SafeRelease(Interface *& pInterfaceToRelease)
-{
-	if (pInterfaceToRelease != NULL)
-	{
-		pInterfaceToRelease->Release();
-		pInterfaceToRelease = NULL;
-	}
-}
+NanCallback*			m_pBodyReaderCallback;
+NanCallback*			m_pDepthReaderCallback;
+NanCallback*			m_pColorReaderCallback;
+NanCallback*			m_pInfraredReaderCallback;
 
-class BodyFrameWorker : public NanAsyncWorker
-{
-	public:
-	JSBodyFrame* bodyFrame;
-	int numTrackedBodies;
-	BodyFrameWorker(NanCallback *callback) : NanAsyncWorker(callback)
-	{
-		bodyFrame = new JSBodyFrame();
-		numTrackedBodies = 0;
-	}
-	~BodyFrameWorker()
-	{
-		delete bodyFrame;
-	}
-
-	// Executed inside the worker-thread.
-	// It is not safe to access V8, or V8 data structures
-	// here, so everything we need for input and output
-	// should go on `this`.
-	void Execute ()
-	{
-		IBodyFrame* pBodyFrame = NULL;
-		HRESULT hr;
-		BOOLEAN frameReadSucceeded = false;
-		do
-		{
-			hr = m_pBodyFrameReader->AcquireLatestFrame(&pBodyFrame);
-			if(SUCCEEDED(hr))
-			{
-				frameReadSucceeded = true;
-				INT64 nTime = 0;
-				hr = pBodyFrame->get_RelativeTime(&nTime);
-
-				IBody* ppBodies[BODY_COUNT] = {0};
-
-				if (SUCCEEDED(hr))
-				{
-					hr = pBodyFrame->GetAndRefreshBodyData(_countof(ppBodies), ppBodies);
-				}
-				for (int i = 0; i < _countof(ppBodies); ++i)
-				{
-					IBody* pBody = ppBodies[i];
-					if (pBody)
-					{
-						BOOLEAN bTracked = false;
-						hr = pBody->get_IsTracked(&bTracked);
-						bodyFrame->bodies[i].tracked = bTracked;
-						if(bTracked)
-						{
-							numTrackedBodies++;
-							UINT64 iTrackingId = 0;
-							hr = pBody->get_TrackingId(&iTrackingId);
-							bodyFrame->bodies[i].trackingId = iTrackingId;
-							//go through the joints
-							Joint joints[JointType_Count];
-							hr = pBody->GetJoints(_countof(joints), joints);
-							if (SUCCEEDED(hr))
-							{
-								for (int j = 0; j < _countof(joints); ++j)
-								{
-									DepthSpacePoint depthPoint = {0};
-    								m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
-									
-									bodyFrame->bodies[i].joints[j].x = depthPoint.X;
-									bodyFrame->bodies[i].joints[j].y = depthPoint.Y;
-									bodyFrame->bodies[i].joints[j].jointType = joints[j].JointType;
-								}
-							}
-						}
-						else
-						{
-							bodyFrame->bodies[i].trackingId = 0;
-						}
-					}
-				}
-				for (int i = 0; i < _countof(ppBodies); ++i)
-				{
-					SafeRelease(ppBodies[i]);
-				}
-			}
-		}
-		while(!frameReadSucceeded);
-
-		SafeRelease(pBodyFrame);
-	}
-
-	// Executed when the async work is complete
-	// this function will be run inside the main event loop
-	// so it is safe to use V8 again
-	void HandleOKCallback ()
-	{
-		NanScope();
-
-		//save the bodies as a V8 object structure
-		v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(numTrackedBodies);
-		int bodyIndex = 0;
-		for(int i = 0; i < BODY_COUNT; i++)
-		{
-			if(bodyFrame->bodies[i].tracked)
-			{
-				//create a body object
-				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
-				v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(bodyFrame->bodies[i].trackingId));
-
-				v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
-				//joints
-				for (int j = 0; j < _countof(bodyFrame->bodies[i].joints); ++j)
-				{
-					v8::Local<v8::Object> v8joint = NanNew<v8::Object>();
-					v8joint->Set(NanNew<v8::String>("x"), NanNew<v8::Number>(bodyFrame->bodies[i].joints[j].x));
-					v8joint->Set(NanNew<v8::String>("y"), NanNew<v8::Number>(bodyFrame->bodies[i].joints[j].y));
-					v8joints->Set(NanNew<v8::Number>(bodyFrame->bodies[i].joints[j].jointType), v8joint);
-				}
-				v8body->Set(NanNew<v8::String>("joints"), v8joints);
-
-				v8bodies->Set(bodyIndex, v8body);
-				bodyIndex++;
-			}
-		}
-
-		Local<Value> argv[] = {
-			v8bodies
-		};
-
-		callback->Call(1, argv);
-	};
-
-	private:
-};
-
-class DepthFrameWorker : public NanAsyncWorker
-{
-	public:
-	DepthFrameWorker(NanCallback *callback) : NanAsyncWorker(callback)
-	{
-	}
-	~DepthFrameWorker()
-	{
-	}
-
-	// Executed inside the worker-thread.
-	// It is not safe to access V8, or V8 data structures
-	// here, so everything we need for input and output
-	// should go on `this`.
-	void Execute ()
-	{
-		IDepthFrame* pDepthFrame = NULL;
-		IFrameDescription* pFrameDescription = NULL;
-		int nWidth = 0;
-		int nHeight = 0;
-		USHORT nDepthMinReliableDistance = 0;
-		USHORT nDepthMaxDistance = 0;
-		UINT nBufferSize = 0;
-		UINT16 *pBuffer = NULL;
-
-		int mapDepthToByte = 8000 / 256;
-
-		HRESULT hr;
-		bool frameReadSucceeded = false;
-		do
-		{
-			hr = m_pDepthFrameReader->AcquireLatestFrame(&pDepthFrame);
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pDepthFrame->get_FrameDescription(&pFrameDescription);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pFrameDescription->get_Width(&nWidth);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pFrameDescription->get_Height(&nHeight);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pDepthFrame->get_DepthMinReliableDistance(&nDepthMinReliableDistance);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pDepthFrame->get_DepthMaxReliableDistance(&nDepthMaxDistance);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pDepthFrame->AccessUnderlyingBuffer(&nBufferSize, &pBuffer);            
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				frameReadSucceeded = true;
-				mapDepthToByte = nDepthMaxDistance / 256;
-				if (m_pDepthPixels && pBuffer && (nWidth == cDepthWidth) && (nHeight == cDepthHeight))
-				{
-					char* pDepthPixel = m_pDepthPixels;
-
-					// end pixel is start + width*height - 1
-					const UINT16* pBufferEnd = pBuffer + (nWidth * nHeight);
-
-					while (pBuffer < pBufferEnd)
-					{
-						USHORT depth = *pBuffer;
-
-						BYTE intensity = static_cast<BYTE>(depth >= nDepthMinReliableDistance && depth <= nDepthMaxDistance ? (depth / mapDepthToByte) : 0);
-						*pDepthPixel = intensity;
-
-						++pDepthPixel;
-						++pBuffer;
-					}
-				}
-			}
-
-			SafeRelease(pFrameDescription);
-		}
-		while(!frameReadSucceeded);
-
-		SafeRelease(pDepthFrame);
-	}
-
-	// Executed when the async work is complete
-	// this function will be run inside the main event loop
-	// so it is safe to use V8 again
-	void HandleOKCallback ()
-	{
-		NanScope();
-
-		Local<Value> argv[] = {
-			NanNewBufferHandle(m_pDepthPixels, cDepthWidth * cDepthHeight)
-		};
-
-		callback->Call(1, argv);
-	};
-
-	private:
-};
-
-class ColorFrameWorker : public NanAsyncWorker
-{
-	public:
-	ColorFrameWorker(NanCallback *callback) : NanAsyncWorker(callback)
-	{
-	}
-	~ColorFrameWorker()
-	{
-	}
-
-	// Executed inside the worker-thread.
-	// It is not safe to access V8, or V8 data structures
-	// here, so everything we need for input and output
-	// should go on `this`.
-	void Execute ()
-	{
-		IColorFrame* pColorFrame = NULL;
-        IFrameDescription* pFrameDescription = NULL;
-        int nWidth = 0;
-        int nHeight = 0;
-        ColorImageFormat imageFormat = ColorImageFormat_None;
-        UINT nBufferSize = 0;
-        RGBQUAD *pBuffer = NULL;
-
-		HRESULT hr;
-		bool frameReadSucceeded = false;
-		do
-		{
-			hr = m_pColorFrameReader->AcquireLatestFrame(&pColorFrame);
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pColorFrame->get_FrameDescription(&pFrameDescription);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pFrameDescription->get_Width(&nWidth);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pFrameDescription->get_Height(&nHeight);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				hr = pColorFrame->get_RawColorImageFormat(&imageFormat);
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				if (imageFormat == ColorImageFormat_Rgba)
-				{
-					hr = pColorFrame->AccessRawUnderlyingBuffer(&nBufferSize, reinterpret_cast<BYTE**>(&pBuffer));
-				}
-				else if (m_pColorRGBX)
-				{
-					pBuffer = m_pColorRGBX;
-					nBufferSize = cColorWidth * cColorHeight * sizeof(RGBQUAD);
-					hr = pColorFrame->CopyConvertedFrameDataToArray(nBufferSize, reinterpret_cast<BYTE*>(pBuffer), ColorImageFormat_Rgba);            
-				}
-				else
-				{
-					hr = E_FAIL;
-				}
-			}
-
-			if (SUCCEEDED(hr))
-			{
-				frameReadSucceeded = true;
-				memcpy(m_pColorRGBX, pBuffer, cColorWidth * cColorHeight * sizeof(RGBQUAD));
-			}
-
-			SafeRelease(pFrameDescription);
-		}
-		while(!frameReadSucceeded);
-
-		SafeRelease(pColorFrame);
-	}
-
-	// Executed when the async work is complete
-	// this function will be run inside the main event loop
-	// so it is safe to use V8 again
-	void HandleOKCallback ()
-	{
-		NanScope();
-
-		Local<Value> argv[] = {
-			NanNewBufferHandle((char *)m_pColorRGBX, cColorWidth * cColorHeight * sizeof(RGBQUAD))
-		};
-
-		callback->Call(1, argv);
-	};
-
-	private:
-};
+NAN_METHOD(OpenFunction);
+NAN_METHOD(CloseFunction);
+NAN_METHOD(OpenBodyReaderFunction);
+NAN_METHOD(_BodyFrameArrived);
+NAN_METHOD(OpenDepthReaderFunction);
+NAN_METHOD(_DepthFrameArrived);
+NAN_METHOD(OpenColorReaderFunction);
+NAN_METHOD(_ColorFrameArrived);
+NAN_METHOD(OpenInfraredReaderFunction);
+NAN_METHOD(_InfraredFrameArrived);
 
 NAN_METHOD(OpenFunction)
 {
@@ -423,24 +95,6 @@ NAN_METHOD(CloseFunction)
 	NanReturnValue(NanTrue());
 }
 
-NAN_METHOD(_BodyFrameArrived)
-{
-	NanScope();
-	//std::cout << "BodyFrameArrived" << std::endl;
-	if(m_pBodyReaderCallback != NULL)
-	{
-		Local<Value> argv[] = {
-			args[0].As<Array>()
-		};
-		m_pBodyReaderCallback->Call(1, argv);
-	}
-	if(m_pBodyFrameReader != NULL)
-	{
-		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new BodyFrameWorker(callback));
-	}
-}
-
 NAN_METHOD(OpenBodyReaderFunction) 
 {
 	NanScope();
@@ -464,7 +118,7 @@ NAN_METHOD(OpenBodyReaderFunction)
 		{
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new BodyFrameWorker(callback));
+			NanAsyncQueueWorker(new BodyFrameWorker(callback, m_pCoordinateMapper, m_pBodyFrameReader));
 		}
 	}
 	else
@@ -477,37 +131,21 @@ NAN_METHOD(OpenBodyReaderFunction)
 	NanReturnValue(NanTrue());
 }
 
-NAN_METHOD(_DepthFrameArrived)
+NAN_METHOD(_BodyFrameArrived)
 {
 	NanScope();
-	if(m_pDepthReaderCallback != NULL)
+	//std::cout << "BodyFrameArrived" << std::endl;
+	if(m_pBodyReaderCallback != NULL)
 	{
 		Local<Value> argv[] = {
-			args[0].As<Object>()
+			args[0].As<Array>()
 		};
-		m_pDepthReaderCallback->Call(1, argv);
+		m_pBodyReaderCallback->Call(1, argv);
 	}
-	if(m_pDepthFrameReader != NULL)
+	if(m_pBodyFrameReader != NULL)
 	{
-		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new DepthFrameWorker(callback));
-	}
-}
-
-NAN_METHOD(_ColorFrameArrived)
-{
-	NanScope();
-	if(m_pColorReaderCallback != NULL)
-	{
-		Local<Value> argv[] = {
-			args[0].As<Object>()
-		};
-		m_pColorReaderCallback->Call(1, argv);
-	}
-	if(m_pColorFrameReader != NULL)
-	{
-		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_ColorFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new ColorFrameWorker(callback));
+		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
+		NanAsyncQueueWorker(new BodyFrameWorker(callback, m_pCoordinateMapper, m_pBodyFrameReader));
 	}
 }
 
@@ -534,7 +172,7 @@ NAN_METHOD(OpenDepthReaderFunction)
 		{
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new DepthFrameWorker(callback));
+			NanAsyncQueueWorker(new DepthFrameWorker(callback, m_pDepthFrameReader, m_pDepthPixels, cDepthWidth, cDepthHeight));
 		}
 	}
 	else
@@ -545,6 +183,23 @@ NAN_METHOD(OpenDepthReaderFunction)
 	SafeRelease(pDepthFrameSource);
 
 	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(_DepthFrameArrived)
+{
+	NanScope();
+	if(m_pDepthReaderCallback != NULL)
+	{
+		Local<Value> argv[] = {
+			args[0].As<Object>()
+		};
+		m_pDepthReaderCallback->Call(1, argv);
+	}
+	if(m_pDepthFrameReader != NULL)
+	{
+		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
+		NanAsyncQueueWorker(new DepthFrameWorker(callback, m_pDepthFrameReader, m_pDepthPixels, cDepthWidth, cDepthHeight));
+	}
 }
 
 NAN_METHOD(OpenColorReaderFunction) 
@@ -570,7 +225,7 @@ NAN_METHOD(OpenColorReaderFunction)
 		{
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_ColorFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new ColorFrameWorker(callback));
+			NanAsyncQueueWorker(new ColorFrameWorker(callback, m_pColorFrameReader, m_pColorRGBX, cColorWidth, cColorHeight));
 		}
 	}
 	else
@@ -581,6 +236,76 @@ NAN_METHOD(OpenColorReaderFunction)
 	SafeRelease(pColorFrameSource);
 
 	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(_ColorFrameArrived)
+{
+	NanScope();
+	if(m_pColorReaderCallback != NULL)
+	{
+		Local<Value> argv[] = {
+			args[0].As<Object>()
+		};
+		m_pColorReaderCallback->Call(1, argv);
+	}
+	if(m_pColorFrameReader != NULL)
+	{
+		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_ColorFrameArrived)->GetFunction());
+		NanAsyncQueueWorker(new ColorFrameWorker(callback, m_pColorFrameReader, m_pColorRGBX, cColorWidth, cColorHeight));
+	}
+}
+
+NAN_METHOD(OpenInfraredReaderFunction) 
+{
+	NanScope();
+
+	if(m_pInfraredReaderCallback)
+	{
+		m_pInfraredReaderCallback = NULL;
+	}
+
+	m_pInfraredReaderCallback = new NanCallback(args[0].As<Function>());
+
+	HRESULT hr;
+	IInfraredFrameSource* pInfraredFrameSource = NULL;
+
+	hr = m_pKinectSensor->get_InfraredFrameSource(&pInfraredFrameSource);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pInfraredFrameSource->OpenReader(&m_pInfraredFrameReader);
+		if (SUCCEEDED(hr))
+		{
+			//start async worker
+			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_InfraredFrameArrived)->GetFunction());
+			NanAsyncQueueWorker(new InfraredFrameWorker(callback, m_pInfraredFrameReader, m_pInfraredPixels, cInfraredWidth, cInfraredHeight));
+		}
+	}
+	else
+	{
+		NanReturnValue(NanFalse());
+	}
+
+	SafeRelease(pInfraredFrameSource);
+
+	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(_InfraredFrameArrived)
+{
+	NanScope();
+	if(m_pInfraredReaderCallback != NULL)
+	{
+		Local<Value> argv[] = {
+			args[0].As<Object>()
+		};
+		m_pInfraredReaderCallback->Call(1, argv);
+	}
+	if(m_pInfraredFrameReader != NULL)
+	{
+		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_InfraredFrameArrived)->GetFunction());
+		NanAsyncQueueWorker(new InfraredFrameWorker(callback, m_pInfraredFrameReader, m_pInfraredPixels, cInfraredWidth, cInfraredHeight));
+	}
 }
 
 void Init(Handle<Object> exports)
@@ -595,6 +320,8 @@ void Init(Handle<Object> exports)
 		NanNew<FunctionTemplate>(OpenDepthReaderFunction)->GetFunction());
 	exports->Set(NanNew<String>("openColorReader"),
 		NanNew<FunctionTemplate>(OpenColorReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("openInfraredReader"),
+		NanNew<FunctionTemplate>(OpenInfraredReaderFunction)->GetFunction());
 }
 
 NODE_MODULE(kinect2, Init)
