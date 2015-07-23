@@ -32,7 +32,7 @@ Build this module by navigating to the directory of this module and running pang
 
 ``` bash
 $ cd node_modules/kinect2
-$ npm install -g pangyp
+$ pangyp rebuild
 ```
 
 ## Usage
