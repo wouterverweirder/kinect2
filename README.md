@@ -35,6 +35,15 @@ $ cd node_modules/kinect2
 $ pangyp rebuild
 ```
 
+### electron
+
+If you want to use this module inside an electron application, you will need to [build this module for electron usage](https://github.com/atom/electron/blob/master/docs/tutorial/using-native-node-modules.md).
+
+``` bash
+$ cd node_modules/kinect2
+$ node-gyp rebuild --target=0.30.0 --arch=x64 --dist-url=https://atom.io/download/atom-shell
+```
+
 ## Usage
 
 ```
