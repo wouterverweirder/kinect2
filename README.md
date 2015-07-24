@@ -22,17 +22,10 @@ If you are using io.js, you will need to use pangyp to build this module. Instal
 $ npm install -g pangyp
 ```
 
-Npm install this module, you will get some errors on node-gyp because node-gyp does not know of the io.js download locations.
+After this, npm install should work.
 
 ``` bash
 $ npm install kinect2
-```
-
-Build this module by navigating to the directory of this module and running pangyp rebuild:
-
-``` bash
-$ cd node_modules/kinect2
-$ pangyp rebuild
 ```
 
 ### electron

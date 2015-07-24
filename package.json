@@ -4,7 +4,7 @@
   "description": "Nodejs library to access the kinect 2 data from the official MS SDK",
   "main": "kinect2.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "install": "node tools/install.js"
   },
   "repository": {
     "type": "git",
