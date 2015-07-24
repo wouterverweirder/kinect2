@@ -29,12 +29,12 @@ class ColorFrameWorker : public NanAsyncWorker
 	void Execute ()
 	{
 		IColorFrame* pColorFrame = NULL;
-        IFrameDescription* pFrameDescription = NULL;
-        int nWidth = 0;
-        int nHeight = 0;
-        ColorImageFormat imageFormat = ColorImageFormat_None;
-        UINT nBufferSize = 0;
-        RGBQUAD *pBuffer = NULL;
+		IFrameDescription* pFrameDescription = NULL;
+		int nWidth = 0;
+		int nHeight = 0;
+		ColorImageFormat imageFormat = ColorImageFormat_None;
+		UINT nBufferSize = 0;
+		RGBQUAD *pBuffer = NULL;
 
 		HRESULT hr;
 		bool frameReadSucceeded = false;
@@ -72,7 +72,7 @@ class ColorFrameWorker : public NanAsyncWorker
 				{
 					pBuffer = m_pColorRGBX;
 					nBufferSize = m_cColorWidth * m_cColorHeight * sizeof(RGBQUAD);
-					hr = pColorFrame->CopyConvertedFrameDataToArray(nBufferSize, reinterpret_cast<BYTE*>(pBuffer), ColorImageFormat_Rgba);            
+					hr = pColorFrame->CopyConvertedFrameDataToArray(nBufferSize, reinterpret_cast<BYTE*>(pBuffer), ColorImageFormat_Rgba);
 				}
 				else
 				{

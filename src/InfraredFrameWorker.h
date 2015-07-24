@@ -28,11 +28,11 @@ class InfraredFrameWorker : public NanAsyncWorker
 	void Execute ()
 	{
 		IInfraredFrame* pInfraredFrame = NULL;
-        IFrameDescription* pFrameDescription = NULL;
-        int nWidth = 0;
-        int nHeight = 0;
-        UINT nBufferSize = 0;
-        UINT16 *pBuffer = NULL;
+		IFrameDescription* pFrameDescription = NULL;
+		int nWidth = 0;
+		int nHeight = 0;
+		UINT nBufferSize = 0;
+		UINT16 *pBuffer = NULL;
 
 		HRESULT hr;
 		bool frameReadSucceeded = false;
@@ -72,7 +72,7 @@ class InfraredFrameWorker : public NanAsyncWorker
 
 					while (pBuffer < pBufferEnd)
 					{
-						// normalize the incoming infrared data (ushort) to a float ranging from 
+						// normalize the incoming infrared data (ushort) to a float ranging from
 						// [InfraredOutputValueMinimum, InfraredOutputValueMaximum] by
 						// 1. dividing the incoming value by the source maximum value
 						float intensityRatio = static_cast<float>(*pBuffer) / InfraredSourceValueMaximum;

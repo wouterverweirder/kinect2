@@ -69,8 +69,8 @@ class BodyFrameWorker : public NanAsyncWorker
 								for (int j = 0; j < _countof(joints); ++j)
 								{
 									DepthSpacePoint depthPoint = {0};
-    								m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
-									
+									m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
+
 									bodyFrame->bodies[i].joints[j].x = depthPoint.X;
 									bodyFrame->bodies[i].joints[j].y = depthPoint.Y;
 									bodyFrame->bodies[i].joints[j].jointType = joints[j].JointType;
