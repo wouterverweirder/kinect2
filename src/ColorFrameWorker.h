@@ -2,6 +2,7 @@
 #define Kinect2_ColorFrameWorker_h
 
 #include <nan.h>
+#include <iostream>
 #include "Kinect.h"
 #include "Globals.h"
 #include "Structs.h"
@@ -86,10 +87,9 @@ class ColorFrameWorker : public NanAsyncWorker
 			}
 
 			SafeRelease(pFrameDescription);
+			SafeRelease(pColorFrame);
 		}
 		while(!frameReadSucceeded);
-
-		SafeRelease(pColorFrame);
 	}
 
 	// Executed when the async work is complete

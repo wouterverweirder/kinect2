@@ -88,10 +88,9 @@ class BodyFrameWorker : public NanAsyncWorker
 					SafeRelease(ppBodies[i]);
 				}
 			}
+			SafeRelease(pBodyFrame);
 		}
 		while(!frameReadSucceeded);
-
-		SafeRelease(pBodyFrame);
 	}
 
 	// Executed when the async work is complete

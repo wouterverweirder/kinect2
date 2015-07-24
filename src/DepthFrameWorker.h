@@ -99,10 +99,9 @@ class DepthFrameWorker : public NanAsyncWorker
 			}
 
 			SafeRelease(pFrameDescription);
+			SafeRelease(pDepthFrame);
 		}
 		while(!frameReadSucceeded);
-
-		SafeRelease(pDepthFrame);
 	}
 
 	// Executed when the async work is complete

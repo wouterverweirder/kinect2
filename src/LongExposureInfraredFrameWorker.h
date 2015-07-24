@@ -98,10 +98,9 @@ class LongExposureInfraredFrameWorker : public NanAsyncWorker
 			}
 
 			SafeRelease(pFrameDescription);
+			SafeRelease(pInfraredFrame);
 		}
 		while(!frameReadSucceeded);
-
-		SafeRelease(pInfraredFrame);
 	}
 
 	// Executed when the async work is complete

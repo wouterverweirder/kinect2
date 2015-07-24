@@ -1,5 +1,5 @@
 {
-  "name": "color-feed-browser-lwip-hack",
+  "name": "color-feed-electron",
   "version": "0.0.9",
   "description": "display color feed in electron app",
   "main": "index.js",
