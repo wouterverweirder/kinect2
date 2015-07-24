@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Hello World!</title>
+	</head>
+	<body>
+		<canvas id="canvas" width="1920" height="1080"></canvas>
+		<script>
+			var Kinect2 = require('../../kinect2');
+			var kinect = new Kinect2();
+
+			var canvas = document.getElementById('canvas');
+			var ctx = canvas.getContext('2d');
+			var imageData = ctx.createImageData(canvas.width, canvas.height);
+			var imageDataSize = imageData.data.length;
+
+			if(kinect.open()) {
+				var processing = false;
+				kinect.on('colorFrame', function(imageBuffer){
+					if(processing) {
+						return;
+					}
+					processing = true;
+					var pixelArray = imageData.data;
+					var newPixelData = new Uint8Array(imageBuffer);
+					for (var i = 0; i < imageDataSize; i++) {
+						pixelArray[i] = newPixelData[i];
+					}
+					ctx.putImageData(imageData, 0, 0);
+					processing = false;
+				});
+
+				kinect.openColorReader();
+			}
+		</script>
+	</body>
+</html>
