@@ -12,29 +12,35 @@
 
 using namespace v8;
 
-IKinectSensor*						m_pKinectSensor;
-ICoordinateMapper*					m_pCoordinateMapper;
-IBodyFrameReader*					m_pBodyFrameReader;
-IDepthFrameReader*					m_pDepthFrameReader;
-IColorFrameReader*  				m_pColorFrameReader;
-IInfraredFrameReader* 				m_pInfraredFrameReader;
+IKinectSensor*											m_pKinectSensor;
+ICoordinateMapper*									m_pCoordinateMapper;
+IBodyFrameReader*										m_pBodyFrameReader;
+IDepthFrameReader*									m_pDepthFrameReader;
+IColorFrameReader*  								m_pColorFrameReader;
+IInfraredFrameReader* 							m_pInfraredFrameReader;
 ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader;
+
+bool										m_bBodyReaderOpen = false;
 
 const int 							cDepthWidth  = 512;
 const int 							cDepthHeight = 424;
-char*								m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
+char*										m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
+bool										m_bDepthReaderOpen = false;
 
 const int 							cColorWidth  = 1920;
 const int 							cColorHeight = 1080;
-RGBQUAD*							m_pColorRGBX = new RGBQUAD[cColorWidth * cColorHeight];
+RGBQUAD*								m_pColorRGBX = new RGBQUAD[cColorWidth * cColorHeight];
+bool										m_bColorReaderOpen = false;
 
 const int 							cInfraredWidth  = 512;
 const int 							cInfraredHeight = 424;
-char*								m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
+char*										m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
+bool										m_bInfraredReaderOpen = false;
 
 const int 							cLongExposureInfraredWidth  = 512;
 const int 							cLongExposureInfraredHeight = 424;
-char*								m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
+char*										m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
+bool										m_bLongExposureInfraredReaderOpen = false;
 
 NanCallback*						m_pBodyReaderCallback;
 NanCallback*						m_pDepthReaderCallback;
@@ -44,16 +50,26 @@ NanCallback*						m_pLongExposureInfraredReaderCallback;
 
 NAN_METHOD(OpenFunction);
 NAN_METHOD(CloseFunction);
+
 NAN_METHOD(OpenBodyReaderFunction);
 NAN_METHOD(_BodyFrameArrived);
+NAN_METHOD(CloseBodyReaderFunction);
+
 NAN_METHOD(OpenDepthReaderFunction);
 NAN_METHOD(_DepthFrameArrived);
+NAN_METHOD(CloseDepthReaderFunction);
+
 NAN_METHOD(OpenColorReaderFunction);
 NAN_METHOD(_ColorFrameArrived);
+NAN_METHOD(CloseColorReaderFunction);
+
 NAN_METHOD(OpenInfraredReaderFunction);
 NAN_METHOD(_InfraredFrameArrived);
+NAN_METHOD(CloseInfraredReaderFunction);
+
 NAN_METHOD(OpenLongExposureInfraredReaderFunction);
 NAN_METHOD(_LongExposureInfraredFrameArrived);
+NAN_METHOD(CloseLongExposureInfraredReaderFunction);
 
 NAN_METHOD(OpenFunction)
 {
@@ -73,7 +89,10 @@ NAN_METHOD(OpenFunction)
 			hr = m_pKinectSensor->get_CoordinateMapper(&m_pCoordinateMapper);
 		}
 
-		hr = m_pKinectSensor->Open();
+		if (SUCCEEDED(hr))
+		{
+			hr = m_pKinectSensor->Open();
+		}
 	}
 
 	if (!m_pKinectSensor || FAILED(hr))
@@ -87,8 +106,11 @@ NAN_METHOD(CloseFunction)
 {
 	NanScope();
 
-	// done with body frame reader
-	SafeRelease(m_pBodyFrameReader);
+	m_bBodyReaderOpen = false;
+	m_bDepthReaderOpen = false;
+	m_bColorReaderOpen = false;
+	m_bInfraredReaderOpen = false;
+	m_bLongExposureInfraredReaderOpen = false;
 
 	// done with coordinate mapper
 	SafeRelease(m_pCoordinateMapper);
@@ -104,12 +126,13 @@ NAN_METHOD(CloseFunction)
 	NanReturnValue(NanTrue());
 }
 
-NAN_METHOD(OpenBodyReaderFunction) 
+NAN_METHOD(OpenBodyReaderFunction)
 {
 	NanScope();
 
 	if(m_pBodyReaderCallback)
 	{
+		delete m_pBodyReaderCallback;
 		m_pBodyReaderCallback = NULL;
 	}
 
@@ -125,6 +148,7 @@ NAN_METHOD(OpenBodyReaderFunction)
 		hr = pBodyFrameSource->OpenReader(&m_pBodyFrameReader);
 		if (SUCCEEDED(hr))
 		{
+			m_bBodyReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
 			NanAsyncQueueWorker(new BodyFrameWorker(callback, m_pCoordinateMapper, m_pBodyFrameReader));
@@ -151,6 +175,10 @@ NAN_METHOD(_BodyFrameArrived)
 		};
 		m_pBodyReaderCallback->Call(1, argv);
 	}
+	if(!m_bBodyReaderOpen)
+	{
+		SafeRelease(m_pBodyFrameReader);
+	}
 	if(m_pBodyFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
@@ -158,12 +186,23 @@ NAN_METHOD(_BodyFrameArrived)
 	}
 }
 
-NAN_METHOD(OpenDepthReaderFunction) 
+NAN_METHOD(CloseBodyReaderFunction)
+{
+	NanScope();
+
+	//toggle boolean, we will stop after last frame has arrived
+	m_bBodyReaderOpen = false;
+
+	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(OpenDepthReaderFunction)
 {
 	NanScope();
 
 	if(m_pDepthReaderCallback)
 	{
+		delete m_pDepthReaderCallback;
 		m_pDepthReaderCallback = NULL;
 	}
 
@@ -179,6 +218,7 @@ NAN_METHOD(OpenDepthReaderFunction)
 		hr = pDepthFrameSource->OpenReader(&m_pDepthFrameReader);
 		if (SUCCEEDED(hr))
 		{
+			m_bDepthReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
 			NanAsyncQueueWorker(new DepthFrameWorker(callback, m_pDepthFrameReader, m_pDepthPixels, cDepthWidth, cDepthHeight));
@@ -204,6 +244,10 @@ NAN_METHOD(_DepthFrameArrived)
 		};
 		m_pDepthReaderCallback->Call(1, argv);
 	}
+	if(!m_bDepthReaderOpen)
+	{
+		SafeRelease(m_pDepthFrameReader);
+	}
 	if(m_pDepthFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
@@ -211,12 +255,23 @@ NAN_METHOD(_DepthFrameArrived)
 	}
 }
 
-NAN_METHOD(OpenColorReaderFunction) 
+NAN_METHOD(CloseDepthReaderFunction)
+{
+	NanScope();
+
+	//toggle boolean, we will stop after last frame has arrived
+	m_bDepthReaderOpen = false;
+
+	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(OpenColorReaderFunction)
 {
 	NanScope();
 
 	if(m_pColorReaderCallback)
 	{
+		delete m_pColorReaderCallback;
 		m_pColorReaderCallback = NULL;
 	}
 
@@ -232,6 +287,7 @@ NAN_METHOD(OpenColorReaderFunction)
 		hr = pColorFrameSource->OpenReader(&m_pColorFrameReader);
 		if (SUCCEEDED(hr))
 		{
+			m_bColorReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_ColorFrameArrived)->GetFunction());
 			NanAsyncQueueWorker(new ColorFrameWorker(callback, m_pColorFrameReader, m_pColorRGBX, cColorWidth, cColorHeight));
@@ -257,6 +313,10 @@ NAN_METHOD(_ColorFrameArrived)
 		};
 		m_pColorReaderCallback->Call(1, argv);
 	}
+	if(!m_bColorReaderOpen)
+	{
+		SafeRelease(m_pColorFrameReader);
+	}
 	if(m_pColorFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_ColorFrameArrived)->GetFunction());
@@ -264,12 +324,23 @@ NAN_METHOD(_ColorFrameArrived)
 	}
 }
 
-NAN_METHOD(OpenInfraredReaderFunction) 
+NAN_METHOD(CloseColorReaderFunction)
+{
+	NanScope();
+
+	//toggle boolean, we will stop after last frame has arrived
+	m_bColorReaderOpen = false;
+
+	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(OpenInfraredReaderFunction)
 {
 	NanScope();
 
 	if(m_pInfraredReaderCallback)
 	{
+		delete m_pInfraredReaderCallback;
 		m_pInfraredReaderCallback = NULL;
 	}
 
@@ -285,6 +356,7 @@ NAN_METHOD(OpenInfraredReaderFunction)
 		hr = pInfraredFrameSource->OpenReader(&m_pInfraredFrameReader);
 		if (SUCCEEDED(hr))
 		{
+			m_bInfraredReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_InfraredFrameArrived)->GetFunction());
 			NanAsyncQueueWorker(new InfraredFrameWorker(callback, m_pInfraredFrameReader, m_pInfraredPixels, cInfraredWidth, cInfraredHeight));
@@ -310,6 +382,10 @@ NAN_METHOD(_InfraredFrameArrived)
 		};
 		m_pInfraredReaderCallback->Call(1, argv);
 	}
+	if(!m_bInfraredReaderOpen)
+	{
+		SafeRelease(m_pInfraredFrameReader);
+	}
 	if(m_pInfraredFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_InfraredFrameArrived)->GetFunction());
@@ -317,12 +393,23 @@ NAN_METHOD(_InfraredFrameArrived)
 	}
 }
 
-NAN_METHOD(OpenLongExposureInfraredReaderFunction) 
+NAN_METHOD(CloseInfraredReaderFunction)
+{
+	NanScope();
+
+	//toggle boolean, we will stop after last frame has arrived
+	m_bInfraredReaderOpen = false;
+
+	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(OpenLongExposureInfraredReaderFunction)
 {
 	NanScope();
 
 	if(m_pLongExposureInfraredReaderCallback)
 	{
+		delete m_pLongExposureInfraredReaderCallback;
 		m_pLongExposureInfraredReaderCallback = NULL;
 	}
 
@@ -338,6 +425,7 @@ NAN_METHOD(OpenLongExposureInfraredReaderFunction)
 		hr = pLongExposureInfraredFrameSource->OpenReader(&m_pLongExposureInfraredFrameReader);
 		if (SUCCEEDED(hr))
 		{
+			m_bLongExposureInfraredReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_LongExposureInfraredFrameArrived)->GetFunction());
 			NanAsyncQueueWorker(new LongExposureInfraredFrameWorker(callback, m_pLongExposureInfraredFrameReader, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth, cLongExposureInfraredHeight));
@@ -363,11 +451,25 @@ NAN_METHOD(_LongExposureInfraredFrameArrived)
 		};
 		m_pLongExposureInfraredReaderCallback->Call(1, argv);
 	}
+	if(!m_bLongExposureInfraredReaderOpen)
+	{
+		SafeRelease(m_pLongExposureInfraredFrameReader);
+	}
 	if(m_pLongExposureInfraredFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_LongExposureInfraredFrameArrived)->GetFunction());
 		NanAsyncQueueWorker(new LongExposureInfraredFrameWorker(callback, m_pLongExposureInfraredFrameReader, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth, cLongExposureInfraredHeight));
 	}
+}
+
+NAN_METHOD(CloseLongExposureInfraredReaderFunction)
+{
+	NanScope();
+
+	//toggle boolean, we will stop after last frame has arrived
+	m_bLongExposureInfraredReaderOpen = false;
+
+	NanReturnValue(NanTrue());
 }
 
 void Init(Handle<Object> exports)
@@ -378,14 +480,24 @@ void Init(Handle<Object> exports)
 		NanNew<FunctionTemplate>(CloseFunction)->GetFunction());
 	exports->Set(NanNew<String>("openBodyReader"),
 		NanNew<FunctionTemplate>(OpenBodyReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("closeBodyReader"),
+		NanNew<FunctionTemplate>(CloseBodyReaderFunction)->GetFunction());
 	exports->Set(NanNew<String>("openDepthReader"),
 		NanNew<FunctionTemplate>(OpenDepthReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("closeDepthReader"),
+		NanNew<FunctionTemplate>(CloseDepthReaderFunction)->GetFunction());
 	exports->Set(NanNew<String>("openColorReader"),
 		NanNew<FunctionTemplate>(OpenColorReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("closeColorReader"),
+		NanNew<FunctionTemplate>(CloseColorReaderFunction)->GetFunction());
 	exports->Set(NanNew<String>("openInfraredReader"),
 		NanNew<FunctionTemplate>(OpenInfraredReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("closeInfraredReader"),
+		NanNew<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
 	exports->Set(NanNew<String>("openLongExposureInfraredReader"),
 		NanNew<FunctionTemplate>(OpenLongExposureInfraredReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("closeLongExposureInfraredReader"),
+		NanNew<FunctionTemplate>(CloseLongExposureInfraredReaderFunction)->GetFunction());
 }
 
 NODE_MODULE(kinect2, Init)

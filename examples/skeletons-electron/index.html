@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Hello World!</title>
+		<style>
+		#toggleFeedButton {
+			display: block;
+		}
+		</style>
+	</head>
+	<body>
+		<button id="toggleFeedButton" disabled="disabled">Stop Tracking</button>
+		<canvas id="outputCanvas" width="512" height="424"></canvas>
+		<script>
+		(function(){
+			var Kinect2 = require('../../kinect2');
+			var kinect = new Kinect2();
+
+			var canvas = document.getElementById('outputCanvas');
+			var ctx = canvas.getContext('2d');
+			var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
+
+			var toggleFeedButton = document.getElementById('toggleFeedButton');
+
+			var feedOpen = false;
+
+			function setFeedOpen(value) {
+				if(value !== feedOpen) {
+					feedOpen = value;
+					if(feedOpen) {
+						toggleFeedButton.innerHTML = 'Stop Tracking';
+						kinect.openBodyReader();
+					} else {
+						toggleFeedButton.innerHTML = 'Start Tracking';
+						kinect.closeBodyReader();
+					}
+				}
+			}
+
+			if(kinect.open()) {
+				kinect.on('bodyFrame', function(bodies){
+					ctx.clearRect(0, 0, canvas.width, canvas.height);
+					var index = 0;
+					bodies.forEach(function(body){
+						for(var jointName in body.joints) {
+							var joint = body.joints[jointName];
+							ctx.fillStyle = colors[index];
+							ctx.fillRect(joint.x, joint.y, 10, 10);
+						}
+						index++;
+					});
+				});
+
+				toggleFeedButton.addEventListener('click', function(){
+					setFeedOpen(!feedOpen);
+				});
+
+				toggleFeedButton.removeAttribute('disabled');
+
+				setFeedOpen(true);
+			}
+		})();
+		</script>
+	</body>
+</html>

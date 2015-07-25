@@ -11,9 +11,9 @@ class ColorFrameWorker : public NanAsyncWorker
 {
 	public:
 	IColorFrameReader*		m_pColorFrameReader;
-	RGBQUAD*				m_pColorRGBX;
-	int 					m_cColorWidth;
-	int 					m_cColorHeight;
+	RGBQUAD*							m_pColorRGBX;
+	int 									m_cColorWidth;
+	int 									m_cColorHeight;
 	ColorFrameWorker(NanCallback *callback, IColorFrameReader *pColorFrameReader, RGBQUAD *pColorRGBX, int cColorWidth, int cColorHeight)
 		: NanAsyncWorker(callback), m_pColorFrameReader(pColorFrameReader), m_pColorRGBX(pColorRGBX), m_cColorWidth(cColorWidth), m_cColorHeight(cColorHeight)
 	{
@@ -40,6 +40,7 @@ class ColorFrameWorker : public NanAsyncWorker
 		bool frameReadSucceeded = false;
 		do
 		{
+
 			hr = m_pColorFrameReader->AcquireLatestFrame(&pColorFrame);
 
 			if (SUCCEEDED(hr))

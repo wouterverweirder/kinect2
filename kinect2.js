@@ -17,20 +17,40 @@ Kinect2.prototype.openDepthReader = function() {
 	return this.nativeKinect2.openDepthReader(this.depthFrameCallback.bind(this));
 };
 
+Kinect2.prototype.closeDepthReader = function() {
+	return this.nativeKinect2.closeDepthReader();
+};
+
 Kinect2.prototype.openColorReader = function() {
 	return this.nativeKinect2.openColorReader(this.colorFrameCallback.bind(this));
+};
+
+Kinect2.prototype.closeColorReader = function() {
+	return this.nativeKinect2.closeColorReader();
 };
 
 Kinect2.prototype.openInfraredReader = function() {
 	return this.nativeKinect2.openInfraredReader(this.infraredFrameCallback.bind(this));
 };
 
+Kinect2.prototype.closeInfraredReader = function() {
+	return this.nativeKinect2.closeInfraredReader();
+};
+
 Kinect2.prototype.openLongExposureInfraredReader = function() {
 	return this.nativeKinect2.openLongExposureInfraredReader(this.longExposureInfraredFrameCallback.bind(this));
 };
 
+Kinect2.prototype.closeLongExposureInfraredReader = function() {
+	return this.nativeKinect2.closeLongExposureInfraredReader();
+};
+
 Kinect2.prototype.openBodyReader = function() {
 	return this.nativeKinect2.openBodyReader(this.bodyFrameCallback.bind(this));
+};
+
+Kinect2.prototype.closeBodyReader = function() {
+	return this.nativeKinect2.closeBodyReader();
 };
 
 Kinect2.prototype.close = function() {

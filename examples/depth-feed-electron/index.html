@@ -6,15 +6,11 @@
 		#toggleFeedButton {
 			display: block;
 		}
-		#outputCanvas {
-			width: 960px;
-			height: 540px;
-		}
 		</style>
 	</head>
 	<body>
 		<button id="toggleFeedButton" disabled="disabled">Stop Video</button>
-		<canvas id="outputCanvas" width="1920" height="1080"></canvas>
+		<canvas id="outputCanvas" width="512" height="424"></canvas>
 		<script>
 		(function(){
 			var Kinect2 = require('../../kinect2');
@@ -35,24 +31,29 @@
 					feedOpen = value;
 					if(feedOpen) {
 						toggleFeedButton.innerHTML = 'Stop Video';
-						kinect.openColorReader();
+						kinect.openDepthReader();
 					} else {
 						toggleFeedButton.innerHTML = 'Start Video';
-						kinect.closeColorReader();
+						kinect.closeDepthReader();
 					}
 				}
 			}
 
 			if(kinect.open()) {
-				kinect.on('colorFrame', function(imageBuffer){
+				kinect.on('depthFrame', function(imageBuffer){
 					if(processing) {
 						return;
 					}
 					processing = true;
 					var pixelArray = imageData.data;
 					var newPixelData = new Uint8Array(imageBuffer);
-					for (var i = 0; i < imageDataSize; i++) {
-						pixelArray[i] = newPixelData[i];
+					var depthPixelIndex = 0;
+					for (var i = 0; i < imageDataSize; i+=4) {
+						pixelArray[i] = newPixelData[depthPixelIndex];
+						pixelArray[i+1] = newPixelData[depthPixelIndex];
+						pixelArray[i+2] = newPixelData[depthPixelIndex];
+						pixelArray[i+3] = 0xff;
+						depthPixelIndex++
 					}
 					ctx.putImageData(imageData, 0, 0);
 					processing = false;

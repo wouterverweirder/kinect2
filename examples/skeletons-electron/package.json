@@ -1,15 +1,15 @@
 {
-  "name": "depth-feed-browser",
+  "name": "skeletons-electron",
   "version": "0.0.10",
-  "description": "display depth feed in browser",
+  "description": "display skeleton tracking in electron app",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Wouter Verweirder <wouter.verweirder@gmail.com>",
   "license": "MIT",
-  "dependencies": {
-    "express": "~4.9.5",
-    "socket.io": "~1.1.0"
+  "dependencies": {},
+  "devDependencies": {
+    "electron-prebuilt": "^0.30.0"
   }
 }

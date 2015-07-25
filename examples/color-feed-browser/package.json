@@ -1,6 +1,6 @@
 {
   "name": "color-feed-browser",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "display color feed in browser",
   "main": "index.js",
   "scripts": {
