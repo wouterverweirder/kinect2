@@ -109,7 +109,7 @@ class BodyFrameWorker : public NanAsyncWorker
 			{
 				//create a body object
 				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
-				v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(bodyFrame->bodies[i].trackingId));
+				v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(bodyFrame->bodies[i].trackingId)));
 
 				v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
 				//joints
