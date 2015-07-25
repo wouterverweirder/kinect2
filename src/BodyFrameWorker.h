@@ -9,12 +9,13 @@
 class BodyFrameWorker : public NanAsyncWorker
 {
 	public:
-	ICoordinateMapper*	m_pCoordinateMapper;
-	IBodyFrameReader*	m_pBodyFrameReader;
-	JSBodyFrame*		bodyFrame;
-	int					numTrackedBodies;
-	BodyFrameWorker(NanCallback *callback, ICoordinateMapper *pCoordinateMapper, IBodyFrameReader *pBodyFrameReader)
-		: NanAsyncWorker(callback), m_pCoordinateMapper(pCoordinateMapper), m_pBodyFrameReader(pBodyFrameReader), numTrackedBodies(0)
+	uv_mutex_t* 					m_pMutex;
+	ICoordinateMapper*		m_pCoordinateMapper;
+	IBodyFrameReader*			m_pBodyFrameReader;
+	JSBodyFrame*					bodyFrame;
+	int										numTrackedBodies;
+	BodyFrameWorker(NanCallback *callback, uv_mutex_t* pMutex, ICoordinateMapper *pCoordinateMapper, IBodyFrameReader *pBodyFrameReader)
+		: NanAsyncWorker(callback), m_pMutex(pMutex), m_pCoordinateMapper(pCoordinateMapper), m_pBodyFrameReader(pBodyFrameReader), numTrackedBodies(0)
 	{
 		bodyFrame = new JSBodyFrame();
 	}
@@ -31,22 +32,24 @@ class BodyFrameWorker : public NanAsyncWorker
 	{
 		IBodyFrame* pBodyFrame = NULL;
 		HRESULT hr;
+		INT64 nTime = 0;
+		IBody* ppBodies[BODY_COUNT] = {0};
 		BOOLEAN frameReadSucceeded = false;
+		uv_mutex_lock(m_pMutex);
 		do
 		{
 			hr = m_pBodyFrameReader->AcquireLatestFrame(&pBodyFrame);
 			if(SUCCEEDED(hr))
 			{
-				frameReadSucceeded = true;
-				INT64 nTime = 0;
 				hr = pBodyFrame->get_RelativeTime(&nTime);
-
-				IBody* ppBodies[BODY_COUNT] = {0};
-
-				if (SUCCEEDED(hr))
-				{
-					hr = pBodyFrame->GetAndRefreshBodyData(_countof(ppBodies), ppBodies);
-				}
+			}
+			if(SUCCEEDED(hr))
+			{
+				hr = pBodyFrame->GetAndRefreshBodyData(_countof(ppBodies), ppBodies);
+			}
+			if(SUCCEEDED(hr))
+			{
+				frameReadSucceeded = true;
 				for (int i = 0; i < _countof(ppBodies); ++i)
 				{
 					IBody* pBody = ppBodies[i];
@@ -83,14 +86,17 @@ class BodyFrameWorker : public NanAsyncWorker
 						}
 					}
 				}
-				for (int i = 0; i < _countof(ppBodies); ++i)
-				{
-					SafeRelease(ppBodies[i]);
-				}
 			}
 			SafeRelease(pBodyFrame);
 		}
 		while(!frameReadSucceeded);
+
+		for (int i = 0; i < _countof(ppBodies); ++i)
+		{
+			SafeRelease(ppBodies[i]);
+		}
+
+		uv_mutex_unlock(m_pMutex);
 	}
 
 	// Executed when the async work is complete

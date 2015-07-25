@@ -10,12 +10,14 @@
 class ColorFrameWorker : public NanAsyncWorker
 {
 	public:
+	uv_mutex_t* 					m_pMutex;
 	IColorFrameReader*		m_pColorFrameReader;
 	RGBQUAD*							m_pColorRGBX;
+
 	int 									m_cColorWidth;
 	int 									m_cColorHeight;
-	ColorFrameWorker(NanCallback *callback, IColorFrameReader *pColorFrameReader, RGBQUAD *pColorRGBX, int cColorWidth, int cColorHeight)
-		: NanAsyncWorker(callback), m_pColorFrameReader(pColorFrameReader), m_pColorRGBX(pColorRGBX), m_cColorWidth(cColorWidth), m_cColorHeight(cColorHeight)
+	ColorFrameWorker(NanCallback *callback, uv_mutex_t* pMutex, IColorFrameReader *pColorFrameReader, RGBQUAD *pColorRGBX, int cColorWidth, int cColorHeight)
+		: NanAsyncWorker(callback), m_pMutex(pMutex), m_pColorFrameReader(pColorFrameReader), m_pColorRGBX(pColorRGBX), m_cColorWidth(cColorWidth), m_cColorHeight(cColorHeight)
 	{
 	}
 	~ColorFrameWorker()
@@ -38,9 +40,9 @@ class ColorFrameWorker : public NanAsyncWorker
 
 		HRESULT hr;
 		bool frameReadSucceeded = false;
+		uv_mutex_lock(m_pMutex);
 		do
 		{
-
 			hr = m_pColorFrameReader->AcquireLatestFrame(&pColorFrame);
 
 			if (SUCCEEDED(hr))
@@ -91,6 +93,8 @@ class ColorFrameWorker : public NanAsyncWorker
 			SafeRelease(pColorFrame);
 		}
 		while(!frameReadSucceeded);
+
+		uv_mutex_unlock(m_pMutex);
 	}
 
 	// Executed when the async work is complete

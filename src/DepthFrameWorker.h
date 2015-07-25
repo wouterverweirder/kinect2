@@ -9,12 +9,13 @@
 class DepthFrameWorker : public NanAsyncWorker
 {
 	public:
-	IDepthFrameReader*	m_pDepthFrameReader;
-	char*				m_pDepthPixels;
-	int 				m_cDepthWidth;
-	int 				m_cDepthHeight;
-	DepthFrameWorker(NanCallback *callback, IDepthFrameReader* pDepthFrameReader, char* pDepthPixels, int cDepthWidth, int cDepthHeight)
-		 : NanAsyncWorker(callback), m_pDepthFrameReader(pDepthFrameReader), m_pDepthPixels(pDepthPixels), m_cDepthWidth(cDepthWidth), m_cDepthHeight(cDepthHeight)
+	uv_mutex_t* 					m_pMutex;
+	IDepthFrameReader*		m_pDepthFrameReader;
+	char*									m_pDepthPixels;
+	int 									m_cDepthWidth;
+	int 									m_cDepthHeight;
+	DepthFrameWorker(NanCallback *callback, uv_mutex_t* pMutex, IDepthFrameReader* pDepthFrameReader, char* pDepthPixels, int cDepthWidth, int cDepthHeight)
+		 : NanAsyncWorker(callback), m_pMutex(pMutex), m_pDepthFrameReader(pDepthFrameReader), m_pDepthPixels(pDepthPixels), m_cDepthWidth(cDepthWidth), m_cDepthHeight(cDepthHeight)
 	{
 	}
 	~DepthFrameWorker()
@@ -40,6 +41,7 @@ class DepthFrameWorker : public NanAsyncWorker
 
 		HRESULT hr;
 		bool frameReadSucceeded = false;
+		uv_mutex_lock(m_pMutex);
 		do
 		{
 			hr = m_pDepthFrameReader->AcquireLatestFrame(&pDepthFrame);
@@ -71,7 +73,7 @@ class DepthFrameWorker : public NanAsyncWorker
 
 			if (SUCCEEDED(hr))
 			{
-				hr = pDepthFrame->AccessUnderlyingBuffer(&nBufferSize, &pBuffer);            
+				hr = pDepthFrame->AccessUnderlyingBuffer(&nBufferSize, &pBuffer);
 			}
 
 			if (SUCCEEDED(hr))
@@ -102,6 +104,8 @@ class DepthFrameWorker : public NanAsyncWorker
 			SafeRelease(pDepthFrame);
 		}
 		while(!frameReadSucceeded);
+
+		uv_mutex_unlock(m_pMutex);
 	}
 
 	// Executed when the async work is complete

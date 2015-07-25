@@ -20,33 +20,33 @@ IColorFrameReader*  								m_pColorFrameReader;
 IInfraredFrameReader* 							m_pInfraredFrameReader;
 ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader;
 
-bool										m_bBodyReaderOpen = false;
-
 const int 							cDepthWidth  = 512;
 const int 							cDepthHeight = 424;
 char*										m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
-bool										m_bDepthReaderOpen = false;
 
 const int 							cColorWidth  = 1920;
 const int 							cColorHeight = 1080;
 RGBQUAD*								m_pColorRGBX = new RGBQUAD[cColorWidth * cColorHeight];
-bool										m_bColorReaderOpen = false;
 
 const int 							cInfraredWidth  = 512;
 const int 							cInfraredHeight = 424;
 char*										m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
-bool										m_bInfraredReaderOpen = false;
 
 const int 							cLongExposureInfraredWidth  = 512;
 const int 							cLongExposureInfraredHeight = 424;
 char*										m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
-bool										m_bLongExposureInfraredReaderOpen = false;
 
 NanCallback*						m_pBodyReaderCallback;
 NanCallback*						m_pDepthReaderCallback;
 NanCallback*						m_pColorReaderCallback;
 NanCallback*						m_pInfraredReaderCallback;
 NanCallback*						m_pLongExposureInfraredReaderCallback;
+
+uv_mutex_t							m_bodyReaderMutex;
+uv_mutex_t							m_depthReaderMutex;
+uv_mutex_t							m_colorReaderMutex;
+uv_mutex_t							m_infraredReaderMutex;
+uv_mutex_t							m_longExposureInfraredReaderMutex;
 
 NAN_METHOD(OpenFunction);
 NAN_METHOD(CloseFunction);
@@ -106,11 +106,17 @@ NAN_METHOD(CloseFunction)
 {
 	NanScope();
 
-	m_bBodyReaderOpen = false;
-	m_bDepthReaderOpen = false;
-	m_bColorReaderOpen = false;
-	m_bInfraredReaderOpen = false;
-	m_bLongExposureInfraredReaderOpen = false;
+	uv_mutex_lock(&m_bodyReaderMutex);
+	uv_mutex_lock(&m_depthReaderMutex);
+	uv_mutex_lock(&m_colorReaderMutex);
+	uv_mutex_lock(&m_infraredReaderMutex);
+	uv_mutex_lock(&m_longExposureInfraredReaderMutex);
+
+	SafeRelease(m_pBodyFrameReader);
+	SafeRelease(m_pDepthFrameReader);
+	SafeRelease(m_pColorFrameReader);
+	SafeRelease(m_pInfraredFrameReader);
+	SafeRelease(m_pLongExposureInfraredFrameReader);
 
 	// done with coordinate mapper
 	SafeRelease(m_pCoordinateMapper);
@@ -122,6 +128,12 @@ NAN_METHOD(CloseFunction)
 	}
 
 	SafeRelease(m_pKinectSensor);
+
+	uv_mutex_unlock(&m_bodyReaderMutex);
+	uv_mutex_unlock(&m_depthReaderMutex);
+	uv_mutex_unlock(&m_colorReaderMutex);
+	uv_mutex_unlock(&m_infraredReaderMutex);
+	uv_mutex_unlock(&m_longExposureInfraredReaderMutex);
 
 	NanReturnValue(NanTrue());
 }
@@ -148,10 +160,9 @@ NAN_METHOD(OpenBodyReaderFunction)
 		hr = pBodyFrameSource->OpenReader(&m_pBodyFrameReader);
 		if (SUCCEEDED(hr))
 		{
-			m_bBodyReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new BodyFrameWorker(callback, m_pCoordinateMapper, m_pBodyFrameReader));
+			NanAsyncQueueWorker(new BodyFrameWorker(callback, &m_bodyReaderMutex, m_pCoordinateMapper, m_pBodyFrameReader));
 		}
 	}
 	else
@@ -175,14 +186,10 @@ NAN_METHOD(_BodyFrameArrived)
 		};
 		m_pBodyReaderCallback->Call(1, argv);
 	}
-	if(!m_bBodyReaderOpen)
-	{
-		SafeRelease(m_pBodyFrameReader);
-	}
 	if(m_pBodyFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new BodyFrameWorker(callback, m_pCoordinateMapper, m_pBodyFrameReader));
+		NanAsyncQueueWorker(new BodyFrameWorker(callback, &m_bodyReaderMutex, m_pCoordinateMapper, m_pBodyFrameReader));
 	}
 }
 
@@ -190,8 +197,9 @@ NAN_METHOD(CloseBodyReaderFunction)
 {
 	NanScope();
 
-	//toggle boolean, we will stop after last frame has arrived
-	m_bBodyReaderOpen = false;
+	uv_mutex_lock(&m_bodyReaderMutex);
+	SafeRelease(m_pBodyFrameReader);
+	uv_mutex_unlock(&m_bodyReaderMutex);
 
 	NanReturnValue(NanTrue());
 }
@@ -218,10 +226,9 @@ NAN_METHOD(OpenDepthReaderFunction)
 		hr = pDepthFrameSource->OpenReader(&m_pDepthFrameReader);
 		if (SUCCEEDED(hr))
 		{
-			m_bDepthReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new DepthFrameWorker(callback, m_pDepthFrameReader, m_pDepthPixels, cDepthWidth, cDepthHeight));
+			NanAsyncQueueWorker(new DepthFrameWorker(callback, &m_depthReaderMutex, m_pDepthFrameReader, m_pDepthPixels, cDepthWidth, cDepthHeight));
 		}
 	}
 	else
@@ -244,14 +251,10 @@ NAN_METHOD(_DepthFrameArrived)
 		};
 		m_pDepthReaderCallback->Call(1, argv);
 	}
-	if(!m_bDepthReaderOpen)
-	{
-		SafeRelease(m_pDepthFrameReader);
-	}
 	if(m_pDepthFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_DepthFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new DepthFrameWorker(callback, m_pDepthFrameReader, m_pDepthPixels, cDepthWidth, cDepthHeight));
+		NanAsyncQueueWorker(new DepthFrameWorker(callback, &m_depthReaderMutex, m_pDepthFrameReader, m_pDepthPixels, cDepthWidth, cDepthHeight));
 	}
 }
 
@@ -259,8 +262,9 @@ NAN_METHOD(CloseDepthReaderFunction)
 {
 	NanScope();
 
-	//toggle boolean, we will stop after last frame has arrived
-	m_bDepthReaderOpen = false;
+	uv_mutex_lock(&m_depthReaderMutex);
+	SafeRelease(m_pDepthFrameReader);
+	uv_mutex_unlock(&m_depthReaderMutex);
 
 	NanReturnValue(NanTrue());
 }
@@ -287,10 +291,9 @@ NAN_METHOD(OpenColorReaderFunction)
 		hr = pColorFrameSource->OpenReader(&m_pColorFrameReader);
 		if (SUCCEEDED(hr))
 		{
-			m_bColorReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_ColorFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new ColorFrameWorker(callback, m_pColorFrameReader, m_pColorRGBX, cColorWidth, cColorHeight));
+			NanAsyncQueueWorker(new ColorFrameWorker(callback, &m_colorReaderMutex, m_pColorFrameReader, m_pColorRGBX, cColorWidth, cColorHeight));
 		}
 	}
 	else
@@ -313,14 +316,10 @@ NAN_METHOD(_ColorFrameArrived)
 		};
 		m_pColorReaderCallback->Call(1, argv);
 	}
-	if(!m_bColorReaderOpen)
-	{
-		SafeRelease(m_pColorFrameReader);
-	}
 	if(m_pColorFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_ColorFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new ColorFrameWorker(callback, m_pColorFrameReader, m_pColorRGBX, cColorWidth, cColorHeight));
+		NanAsyncQueueWorker(new ColorFrameWorker(callback, &m_colorReaderMutex, m_pColorFrameReader, m_pColorRGBX, cColorWidth, cColorHeight));
 	}
 }
 
@@ -328,8 +327,9 @@ NAN_METHOD(CloseColorReaderFunction)
 {
 	NanScope();
 
-	//toggle boolean, we will stop after last frame has arrived
-	m_bColorReaderOpen = false;
+	uv_mutex_lock(&m_colorReaderMutex);
+	SafeRelease(m_pColorFrameReader);
+	uv_mutex_unlock(&m_colorReaderMutex);
 
 	NanReturnValue(NanTrue());
 }
@@ -356,10 +356,9 @@ NAN_METHOD(OpenInfraredReaderFunction)
 		hr = pInfraredFrameSource->OpenReader(&m_pInfraredFrameReader);
 		if (SUCCEEDED(hr))
 		{
-			m_bInfraredReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_InfraredFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new InfraredFrameWorker(callback, m_pInfraredFrameReader, m_pInfraredPixels, cInfraredWidth, cInfraredHeight));
+			NanAsyncQueueWorker(new InfraredFrameWorker(callback, &m_infraredReaderMutex, m_pInfraredFrameReader, m_pInfraredPixels, cInfraredWidth, cInfraredHeight));
 		}
 	}
 	else
@@ -382,14 +381,10 @@ NAN_METHOD(_InfraredFrameArrived)
 		};
 		m_pInfraredReaderCallback->Call(1, argv);
 	}
-	if(!m_bInfraredReaderOpen)
-	{
-		SafeRelease(m_pInfraredFrameReader);
-	}
 	if(m_pInfraredFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_InfraredFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new InfraredFrameWorker(callback, m_pInfraredFrameReader, m_pInfraredPixels, cInfraredWidth, cInfraredHeight));
+		NanAsyncQueueWorker(new InfraredFrameWorker(callback, &m_infraredReaderMutex, m_pInfraredFrameReader, m_pInfraredPixels, cInfraredWidth, cInfraredHeight));
 	}
 }
 
@@ -397,8 +392,9 @@ NAN_METHOD(CloseInfraredReaderFunction)
 {
 	NanScope();
 
-	//toggle boolean, we will stop after last frame has arrived
-	m_bInfraredReaderOpen = false;
+	uv_mutex_lock(&m_infraredReaderMutex);
+	SafeRelease(m_pInfraredFrameReader);
+	uv_mutex_unlock(&m_infraredReaderMutex);
 
 	NanReturnValue(NanTrue());
 }
@@ -425,10 +421,9 @@ NAN_METHOD(OpenLongExposureInfraredReaderFunction)
 		hr = pLongExposureInfraredFrameSource->OpenReader(&m_pLongExposureInfraredFrameReader);
 		if (SUCCEEDED(hr))
 		{
-			m_bLongExposureInfraredReaderOpen = true;
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_LongExposureInfraredFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new LongExposureInfraredFrameWorker(callback, m_pLongExposureInfraredFrameReader, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth, cLongExposureInfraredHeight));
+			NanAsyncQueueWorker(new LongExposureInfraredFrameWorker(callback, &m_longExposureInfraredReaderMutex, m_pLongExposureInfraredFrameReader, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth, cLongExposureInfraredHeight));
 		}
 	}
 	else
@@ -451,14 +446,10 @@ NAN_METHOD(_LongExposureInfraredFrameArrived)
 		};
 		m_pLongExposureInfraredReaderCallback->Call(1, argv);
 	}
-	if(!m_bLongExposureInfraredReaderOpen)
-	{
-		SafeRelease(m_pLongExposureInfraredFrameReader);
-	}
 	if(m_pLongExposureInfraredFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_LongExposureInfraredFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new LongExposureInfraredFrameWorker(callback, m_pLongExposureInfraredFrameReader, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth, cLongExposureInfraredHeight));
+		NanAsyncQueueWorker(new LongExposureInfraredFrameWorker(callback, &m_longExposureInfraredReaderMutex, m_pLongExposureInfraredFrameReader, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth, cLongExposureInfraredHeight));
 	}
 }
 
@@ -466,14 +457,21 @@ NAN_METHOD(CloseLongExposureInfraredReaderFunction)
 {
 	NanScope();
 
-	//toggle boolean, we will stop after last frame has arrived
-	m_bLongExposureInfraredReaderOpen = false;
+	uv_mutex_lock(&m_longExposureInfraredReaderMutex);
+	SafeRelease(m_pLongExposureInfraredFrameReader);
+	uv_mutex_unlock(&m_longExposureInfraredReaderMutex);
 
 	NanReturnValue(NanTrue());
 }
 
 void Init(Handle<Object> exports)
 {
+	uv_mutex_init(&m_bodyReaderMutex);
+	uv_mutex_init(&m_depthReaderMutex);
+	uv_mutex_init(&m_colorReaderMutex);
+	uv_mutex_init(&m_infraredReaderMutex);
+	uv_mutex_init(&m_longExposureInfraredReaderMutex);
+
 	exports->Set(NanNew<String>("open"),
 		NanNew<FunctionTemplate>(OpenFunction)->GetFunction());
 	exports->Set(NanNew<String>("close"),

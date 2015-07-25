@@ -9,12 +9,13 @@
 class InfraredFrameWorker : public NanAsyncWorker
 {
 	public:
+	uv_mutex_t* 					m_pMutex;
 	IInfraredFrameReader*	m_pInfraredFrameReader;
-	char*					m_pInfraredPixels;
-	int 					m_cInfraredWidth;
-	int 					m_cInfraredHeight;
-	InfraredFrameWorker(NanCallback *callback, IInfraredFrameReader *pInfraredFrameReader, char *pInfraredPixels, int cInfraredWidth, int cInfraredHeight)
-		: NanAsyncWorker(callback), m_pInfraredFrameReader(pInfraredFrameReader), m_pInfraredPixels(pInfraredPixels), m_cInfraredWidth(cInfraredWidth), m_cInfraredHeight(cInfraredHeight)
+	char*									m_pInfraredPixels;
+	int 									m_cInfraredWidth;
+	int 									m_cInfraredHeight;
+	InfraredFrameWorker(NanCallback *callback, uv_mutex_t* pMutex, IInfraredFrameReader *pInfraredFrameReader, char *pInfraredPixels, int cInfraredWidth, int cInfraredHeight)
+		: NanAsyncWorker(callback), m_pMutex(pMutex), m_pInfraredFrameReader(pInfraredFrameReader), m_pInfraredPixels(pInfraredPixels), m_cInfraredWidth(cInfraredWidth), m_cInfraredHeight(cInfraredHeight)
 	{
 	}
 	~InfraredFrameWorker()
@@ -36,6 +37,7 @@ class InfraredFrameWorker : public NanAsyncWorker
 
 		HRESULT hr;
 		bool frameReadSucceeded = false;
+		uv_mutex_lock(m_pMutex);
 		do
 		{
 			hr = m_pInfraredFrameReader->AcquireLatestFrame(&pInfraredFrame);
@@ -101,6 +103,8 @@ class InfraredFrameWorker : public NanAsyncWorker
 			SafeRelease(pInfraredFrame);
 		}
 		while(!frameReadSucceeded);
+
+		uv_mutex_unlock(m_pMutex);
 	}
 
 	// Executed when the async work is complete

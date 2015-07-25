@@ -1,6 +1,6 @@
 {
   "name": "webclient-express-server",
-  "version": "0.0.10",
+  "version": "0.0.12",
   "description": "show skeletons in browser",
   "main": "index.js",
   "scripts": {
