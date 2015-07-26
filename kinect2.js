@@ -9,8 +9,35 @@ function Kinect2(options) {
 
 util.inherits(Kinect2, events.EventEmitter);
 
+Kinect2.FrameTypes = {
+	None														: 0,
+	Color														: 0x1,
+	Infrared												: 0x2,
+	LongExposureInfrared						: 0x4,
+	Depth														: 0x8,
+	BodyIndex												: 0x10,
+	Body														: 0x20,
+	Audio														: 0x40, //Audio Doesn't Work Right Now
+	BodyIndexColor									: 0x80,
+	BodyIndexDepth									: 0x10, //Same as BodyIndex
+	BodyIndexInfrared								: 0x100,
+	BodyIndexLongExposureInfrared		: 0x200,
+	RawDepth												: 0x400
+};
+
 Kinect2.prototype.open = function() {
 	return this.nativeKinect2.open();
+};
+
+Kinect2.prototype.openMultiSourceReader = function(options) {
+	return this.nativeKinect2.openMultiSourceReader({
+		frameTypes: options.frameTypes,
+		callback: this.multiSourceFrameCallback.bind(this)
+	});
+};
+
+Kinect2.prototype.closeMultiSourceReader = function() {
+	return this.nativeKinect2.closeMultiSourceReader();
 };
 
 Kinect2.prototype.openDepthReader = function() {
@@ -79,6 +106,10 @@ Kinect2.prototype.infraredFrameCallback = function(data) {
 
 Kinect2.prototype.longExposureInfraredFrameCallback = function(data) {
 	this.emit('longExposureInfraredFrame', data);
+};
+
+Kinect2.prototype.multiSourceFrameCallback = function(err, frame) {
+	this.emit('multiSourceFrame', err, frame);
 };
 
 module.exports = Kinect2;

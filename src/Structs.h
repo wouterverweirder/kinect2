@@ -1,5 +1,5 @@
 #ifndef Kinect2_Structs_h
-#define Kinect2_Structs_h	
+#define Kinect2_Structs_h
 
 typedef struct _JSJoint
 {

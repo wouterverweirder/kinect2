@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Hello World!</title>
+		<style>
+		body {
+			background-color: #eee;
+		}
+		#colorCanvas {
+			width: 960px;
+			height: 540px;
+		}
+		</style>
+	</head>
+	<body>
+		<canvas id="depthCanvas" width="512" height="424"></canvas>
+		<canvas id="colorCanvas" width="1920" height="1080"></canvas>
+		<script>
+		(function(){
+			var Kinect2 = require('../../kinect2');
+			var kinect = new Kinect2();
+
+			var depthCanvas = document.getElementById('depthCanvas');
+			var depthCtx = depthCanvas.getContext('2d');
+			var depthImageData = depthCtx.createImageData(depthCanvas.width, depthCanvas.height);
+			var depthImageDataSize = depthImageData.data.length;
+
+			var colorCanvas = document.getElementById('colorCanvas');
+			var colorCtx = colorCanvas.getContext('2d');
+			var colorImageData = colorCtx.createImageData(colorCanvas.width, colorCanvas.height);
+			var colorImageDataSize = colorImageData.data.length;
+
+			var processing = false;
+
+			if(kinect.open()) {
+				kinect.on('multiSourceFrame', function(err, frame){
+					if(processing || err) {
+						return;
+					}
+					processing = true;
+
+					/*
+					//depth
+					var targetDepthPixels = depthImageData.data;
+					var sourceDepthPixels = new Uint8Array(frame.depth.buffer);
+					var depthPixelIndex = 0;
+					for (var i = 0; i < depthImageDataSize; i+=4) {
+						targetDepthPixels[i] = sourceDepthPixels[depthPixelIndex];
+						targetDepthPixels[i+1] = sourceDepthPixels[depthPixelIndex];
+						targetDepthPixels[i+2] = sourceDepthPixels[depthPixelIndex];
+						targetDepthPixels[i+3] = 0xff;
+						depthPixelIndex++;
+					}
+					depthCtx.putImageData(depthImageData, 0, 0);
+					*/
+
+					//color
+					var targetColorPixels = colorImageData.data;
+					var sourceColorPixels = new Uint8Array(frame.bodyIndexColor.buffer);
+					for (var i = 0; i < colorImageDataSize; i++) {
+						targetColorPixels[i] = sourceColorPixels[i];
+					}
+					colorCtx.putImageData(colorImageData, 0, 0);
+
+					//processing done
+					processing = false;
+				});
+
+				kinect.openMultiSourceReader({
+					frameTypes: Kinect2.FrameTypes.BodyIndexColor
+				});
+			}
+		})();
+		</script>
+	</body>
+</html>

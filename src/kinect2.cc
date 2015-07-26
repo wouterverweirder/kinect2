@@ -9,6 +9,7 @@
 #include "ColorFrameWorker.h"
 #include "InfraredFrameWorker.h"
 #include "LongExposureInfraredFrameWorker.h"
+#include "MultiSourceFrameWorker.h"
 
 using namespace v8;
 
@@ -19,6 +20,7 @@ IDepthFrameReader*									m_pDepthFrameReader;
 IColorFrameReader*  								m_pColorFrameReader;
 IInfraredFrameReader* 							m_pInfraredFrameReader;
 ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader;
+IMultiSourceFrameReader*						m_pMultiSourceFrameReader;
 
 const int 							cDepthWidth  = 512;
 const int 							cDepthHeight = 424;
@@ -36,17 +38,29 @@ const int 							cLongExposureInfraredWidth  = 512;
 const int 							cLongExposureInfraredHeight = 424;
 char*										m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
 
+DepthSpacePoint*				m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
+
+RGBQUAD*								m_pBodyIndexColorPixels = new RGBQUAD[cColorWidth * cColorHeight];
+
+//enabledFrameSourceTypes refers to the kinect SDK frame source types
+DWORD										m_enabledFrameSourceTypes = 0;
+//enabledFrameTypes is our own list of frame types
+//this is the kinect SDK list + additional ones (body index in color space, etc...)
+unsigned long						m_enabledFrameTypes = 0;
+
 NanCallback*						m_pBodyReaderCallback;
 NanCallback*						m_pDepthReaderCallback;
 NanCallback*						m_pColorReaderCallback;
 NanCallback*						m_pInfraredReaderCallback;
 NanCallback*						m_pLongExposureInfraredReaderCallback;
+NanCallback*						m_pMultiSourceReaderCallback;
 
 uv_mutex_t							m_bodyReaderMutex;
 uv_mutex_t							m_depthReaderMutex;
 uv_mutex_t							m_colorReaderMutex;
 uv_mutex_t							m_infraredReaderMutex;
 uv_mutex_t							m_longExposureInfraredReaderMutex;
+uv_mutex_t							m_multiSourceReaderMutex;
 
 NAN_METHOD(OpenFunction);
 NAN_METHOD(CloseFunction);
@@ -70,6 +84,10 @@ NAN_METHOD(CloseInfraredReaderFunction);
 NAN_METHOD(OpenLongExposureInfraredReaderFunction);
 NAN_METHOD(_LongExposureInfraredFrameArrived);
 NAN_METHOD(CloseLongExposureInfraredReaderFunction);
+
+NAN_METHOD(OpenMultiSourceReaderFunction);
+NAN_METHOD(_MultiSourceFrameArrived);
+NAN_METHOD(CloseMultiSourceReaderFunction);
 
 NAN_METHOD(OpenFunction)
 {
@@ -111,12 +129,14 @@ NAN_METHOD(CloseFunction)
 	uv_mutex_lock(&m_colorReaderMutex);
 	uv_mutex_lock(&m_infraredReaderMutex);
 	uv_mutex_lock(&m_longExposureInfraredReaderMutex);
+	uv_mutex_lock(&m_multiSourceReaderMutex);
 
 	SafeRelease(m_pBodyFrameReader);
 	SafeRelease(m_pDepthFrameReader);
 	SafeRelease(m_pColorFrameReader);
 	SafeRelease(m_pInfraredFrameReader);
 	SafeRelease(m_pLongExposureInfraredFrameReader);
+	SafeRelease(m_pMultiSourceFrameReader);
 
 	// done with coordinate mapper
 	SafeRelease(m_pCoordinateMapper);
@@ -134,6 +154,7 @@ NAN_METHOD(CloseFunction)
 	uv_mutex_unlock(&m_colorReaderMutex);
 	uv_mutex_unlock(&m_infraredReaderMutex);
 	uv_mutex_unlock(&m_longExposureInfraredReaderMutex);
+	uv_mutex_unlock(&m_multiSourceReaderMutex);
 
 	NanReturnValue(NanTrue());
 }
@@ -178,7 +199,6 @@ NAN_METHOD(OpenBodyReaderFunction)
 NAN_METHOD(_BodyFrameArrived)
 {
 	NanScope();
-	//std::cout << "BodyFrameArrived" << std::endl;
 	if(m_pBodyReaderCallback != NULL)
 	{
 		Local<Value> argv[] = {
@@ -464,6 +484,146 @@ NAN_METHOD(CloseLongExposureInfraredReaderFunction)
 	NanReturnValue(NanTrue());
 }
 
+NAN_METHOD(OpenMultiSourceReaderFunction)
+{
+	NanScope();
+
+	if(m_pMultiSourceReaderCallback)
+	{
+		delete m_pMultiSourceReaderCallback;
+		m_pMultiSourceReaderCallback = NULL;
+	}
+
+	Local<Object> jsOptions = args[0].As<Object>();
+	Local<Function> jsCallback = jsOptions->Get(NanNew<v8::String>("callback")).As<Function>();
+	m_enabledFrameTypes = static_cast<unsigned long>(jsOptions->Get(NanNew<v8::String>("frameTypes")).As<Number>()->Value());
+
+	//map our own frame types to the correct frame source types
+	m_enabledFrameSourceTypes = FrameSourceTypes::FrameSourceTypes_None;
+	if(
+		m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_Color
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexColor
+	) {
+		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Color;
+	}
+	if(
+		m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_Infrared
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexInfrared
+	) {
+		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Infrared;
+	}
+	if(
+		m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_LongExposureInfrared
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexLongExposureInfrared
+	) {
+		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_LongExposureInfrared;
+	}
+	if(
+		m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_Depth
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndex
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexColor
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexDepth
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexInfrared
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexLongExposureInfrared
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_RawDepth
+	) {
+		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Depth;
+	}
+	if(
+		m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndex
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexColor
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexDepth
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexInfrared
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexLongExposureInfrared
+	) {
+		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_BodyIndex;
+	}
+	if(
+		m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_Body
+	) {
+		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Body;
+	}
+	if(
+		m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_Audio
+	) {
+		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Audio;
+	}
+
+	m_pMultiSourceReaderCallback = new NanCallback(jsCallback);
+
+	HRESULT hr;
+
+	hr = m_pKinectSensor->OpenMultiSourceFrameReader(
+					m_enabledFrameSourceTypes,
+					&m_pMultiSourceFrameReader);
+
+	if (SUCCEEDED(hr))
+	{
+		//start async worker
+		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_MultiSourceFrameArrived)->GetFunction());
+		NanAsyncQueueWorker(new MultiSourceFrameWorker(
+			callback,
+			&m_multiSourceReaderMutex,
+			m_pCoordinateMapper,
+			m_pMultiSourceFrameReader,
+			m_enabledFrameSourceTypes,
+			m_enabledFrameTypes,
+			m_pDepthCoordinatesForColor,
+			m_pColorRGBX, cColorWidth, cColorHeight,
+			m_pDepthPixels, cDepthWidth, cDepthHeight,
+			m_pBodyIndexColorPixels
+		));
+	}
+	else
+	{
+		std::cout << "reader init failed" << std::endl;
+		std::cout << m_enabledFrameSourceTypes << std::endl;
+		NanReturnValue(NanFalse());
+	}
+
+	NanReturnValue(NanTrue());
+}
+
+NAN_METHOD(_MultiSourceFrameArrived)
+{
+	NanScope();
+	if(m_pMultiSourceReaderCallback != NULL)
+	{
+		Local<Value> argv[] = {
+			args[0].As<Object>(),
+			args[1].As<Object>()
+		};
+		m_pMultiSourceReaderCallback->Call(2, argv);
+	}
+	if(m_pMultiSourceFrameReader != NULL)
+	{
+		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_MultiSourceFrameArrived)->GetFunction());
+		NanAsyncQueueWorker(new MultiSourceFrameWorker(
+			callback,
+			&m_multiSourceReaderMutex,
+			m_pCoordinateMapper,
+			m_pMultiSourceFrameReader,
+			m_enabledFrameSourceTypes,
+			m_enabledFrameTypes,
+			m_pDepthCoordinatesForColor,
+			m_pColorRGBX, cColorWidth, cColorHeight,
+			m_pDepthPixels, cDepthWidth, cDepthHeight,
+			m_pBodyIndexColorPixels
+		));
+	}
+}
+
+NAN_METHOD(CloseMultiSourceReaderFunction)
+{
+	NanScope();
+
+	uv_mutex_lock(&m_multiSourceReaderMutex);
+	SafeRelease(m_pMultiSourceFrameReader);
+	uv_mutex_unlock(&m_multiSourceReaderMutex);
+
+	NanReturnValue(NanTrue());
+}
+
 void Init(Handle<Object> exports)
 {
 	uv_mutex_init(&m_bodyReaderMutex);
@@ -471,6 +631,7 @@ void Init(Handle<Object> exports)
 	uv_mutex_init(&m_colorReaderMutex);
 	uv_mutex_init(&m_infraredReaderMutex);
 	uv_mutex_init(&m_longExposureInfraredReaderMutex);
+	uv_mutex_init(&m_multiSourceReaderMutex);
 
 	exports->Set(NanNew<String>("open"),
 		NanNew<FunctionTemplate>(OpenFunction)->GetFunction());
@@ -496,6 +657,10 @@ void Init(Handle<Object> exports)
 		NanNew<FunctionTemplate>(OpenLongExposureInfraredReaderFunction)->GetFunction());
 	exports->Set(NanNew<String>("closeLongExposureInfraredReader"),
 		NanNew<FunctionTemplate>(CloseLongExposureInfraredReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("openMultiSourceReader"),
+		NanNew<FunctionTemplate>(OpenMultiSourceReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("closeMultiSourceReader"),
+		NanNew<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
 }
 
 NODE_MODULE(kinect2, Init)
