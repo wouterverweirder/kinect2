@@ -96,6 +96,9 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 				int nDepthHeight = 0;
 				UINT nDepthBufferSize = 0;
 				UINT16 *pDepthBuffer = NULL;
+				USHORT nDepthMinReliableDistance = 0;
+				USHORT nDepthMaxDistance = 0;
+				int mapDepthToByte = 8000 / 256;
 
 				IBodyIndexFrameReference* pBodyIndexFrameReference = NULL;
 				IBodyIndexFrame* pBodyIndexFrame = NULL;
@@ -187,6 +190,14 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 					if (SUCCEEDED(hr))
 					{
 						hr = pDepthFrameDescription->get_Height(&nDepthHeight);
+					}
+					if (SUCCEEDED(hr))
+					{
+						hr = pDepthFrame->get_DepthMinReliableDistance(&nDepthMinReliableDistance);
+					}
+					if (SUCCEEDED(hr))
+					{
+						hr = pDepthFrame->get_DepthMaxReliableDistance(&nDepthMaxDistance);
 					}
 					if (SUCCEEDED(hr))
 					{
@@ -294,7 +305,37 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 					}
 				}
 
-				//todo: depth & raw depth
+				if(FrameSourceTypes::FrameSourceTypes_Depth & m_enabledFrameSourceTypes)
+				{
+					//depth image
+					if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
+					{
+						if (SUCCEEDED(hr))
+						{
+							mapDepthToByte = nDepthMaxDistance / 256;
+							if (m_pDepthPixels && pDepthBuffer && (nDepthWidth == m_cDepthWidth) && (nDepthHeight == m_cDepthHeight))
+							{
+								char* pDepthPixel = m_pDepthPixels;
+
+								// end pixel is start + width*height - 1
+								const UINT16* pDepthBufferEnd = pDepthBuffer + (nDepthWidth * nDepthHeight);
+
+								while (pDepthBuffer < pDepthBufferEnd)
+								{
+									USHORT depth = *pDepthBuffer;
+
+									BYTE intensity = static_cast<BYTE>(depth >= nDepthMinReliableDistance && depth <= nDepthMaxDistance ? (depth / mapDepthToByte) : 0);
+									*pDepthPixel = intensity;
+
+									++pDepthPixel;
+									++pDepthBuffer;
+								}
+							}
+						}
+					}
+				}
+
+				//todo: add raw depth to above
 				//todo: infrared
 				//todo: long exposure infrared
 				//todo: body
@@ -349,6 +390,13 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 			v8::Local<v8::Object> v8ColorResult = NanNew<v8::Object>();
 			v8ColorResult->Set(NanNew<v8::String>("buffer"), NanNewBufferHandle((char *)m_pColorPixels, m_cColorWidth * m_cColorHeight * sizeof(RGBQUAD)));
 			v8Result->Set(NanNew<v8::String>("color"), v8ColorResult);
+		}
+
+		if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
+		{
+			v8::Local<v8::Object> v8DepthResult = NanNew<v8::Object>();
+			v8DepthResult->Set(NanNew<v8::String>("buffer"), NanNewBufferHandle((char *)m_pDepthPixels, m_cDepthWidth * m_cDepthHeight * sizeof(char)));
+			v8Result->Set(NanNew<v8::String>("depth"), v8DepthResult);
 		}
 
 		if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)

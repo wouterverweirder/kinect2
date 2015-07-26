@@ -3,12 +3,19 @@
 	<head>
 		<title>Hello World!</title>
 		<style>
+		html, body {
+			height: 100%;
+		}
 		body {
-			background-color: #eee;
+			background: linear-gradient(to bottom, #f2f9fe 0%,#d6f0fd 100%);
+		}
+		canvas {
+			display: inline-block;
 		}
 		#colorCanvas {
-			width: 960px;
-			height: 540px;
+			/* rescale color canvas to height of depth canvas */
+			width: 754px;
+			height: 424px;
 		}
 		</style>
 	</head>
@@ -39,7 +46,6 @@
 					}
 					processing = true;
 
-					/*
 					//depth
 					var targetDepthPixels = depthImageData.data;
 					var sourceDepthPixels = new Uint8Array(frame.depth.buffer);
@@ -52,7 +58,6 @@
 						depthPixelIndex++;
 					}
 					depthCtx.putImageData(depthImageData, 0, 0);
-					*/
 
 					//color
 					var targetColorPixels = colorImageData.data;
@@ -67,7 +72,7 @@
 				});
 
 				kinect.openMultiSourceReader({
-					frameTypes: Kinect2.FrameTypes.BodyIndexColor
+					frameTypes: Kinect2.FrameTypes.BodyIndexColor | Kinect2.FrameTypes.Depth
 				});
 			}
 		})();
