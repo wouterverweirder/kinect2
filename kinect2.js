@@ -12,17 +12,17 @@ util.inherits(Kinect2, events.EventEmitter);
 Kinect2.FrameTypes = {
 	None														: 0,
 	Color														: 0x1,
-	Infrared												: 0x2,
-	LongExposureInfrared						: 0x4,
+	Infrared												: 0x2, //Not Implemented Yet
+	LongExposureInfrared						: 0x4, //Not Implemented Yet
 	Depth														: 0x8,
-	BodyIndex												: 0x10,
-	Body														: 0x20,
-	Audio														: 0x40, //Audio Doesn't Work Right Now
+	BodyIndex												: 0x10, //Not Implemented Yet
+	Body														: 0x20, //Not Implemented Yet
+	Audio														: 0x40, //Not Implemented Yet
 	BodyIndexColor									: 0x80,
 	BodyIndexDepth									: 0x10, //Same as BodyIndex
-	BodyIndexInfrared								: 0x100,
-	BodyIndexLongExposureInfrared		: 0x200,
-	RawDepth												: 0x400
+	BodyIndexInfrared								: 0x100, //Not Implemented Yet
+	BodyIndexLongExposureInfrared		: 0x200, //Not Implemented Yet
+	RawDepth												: 0x400 //Not Implemented Yet
 };
 
 Kinect2.prototype.open = function() {

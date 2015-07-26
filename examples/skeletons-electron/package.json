@@ -1,15 +1,15 @@
 {
-  "name": "skeletons-electron",
-  "version": "0.0.12",
-  "description": "display skeleton tracking in electron app",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "Wouter Verweirder <wouter.verweirder@gmail.com>",
-  "license": "MIT",
-  "dependencies": {},
-  "devDependencies": {
-    "electron-prebuilt": "^0.30.0"
-  }
+	"name": "skeletons-electron",
+	"version": "0.0.12",
+	"description": "display skeleton tracking in electron app",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"author": "Wouter Verweirder <wouter.verweirder@gmail.com>",
+	"license": "MIT",
+	"dependencies": {},
+	"devDependencies": {
+		"electron-prebuilt": "^0.30.0"
+	}
 }
