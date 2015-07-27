@@ -29,7 +29,7 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 
 	DepthSpacePoint*						m_pDepthCoordinatesForColor;
 
-	RGBQUAD*										m_pBodyIndexColorPixels;
+	bool*												m_pHasBodyIndices;
 
 	MultiSourceFrameWorker(
 			NanCallback *callback,
@@ -42,7 +42,7 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 			RGBQUAD* pColorPixels, int cColorWidth, int cColorHeight,
 			char* pDepthPixels, int cDepthWidth, int cDepthHeight,
 			JSBodyFrame* pJSBodyFrame,
-			RGBQUAD* pBodyIndexColorPixels
+			bool* pHasBodyIndices
 		)
 		:
 			NanAsyncWorker(callback),
@@ -55,9 +55,13 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 			m_pColorPixels(pColorPixels), m_cColorWidth(cColorWidth), m_cColorHeight(cColorHeight),
 			m_pDepthPixels(pDepthPixels), m_cDepthWidth(cDepthWidth), m_cDepthHeight(cDepthHeight),
 			m_pJSBodyFrame(pJSBodyFrame),
-			m_pBodyIndexColorPixels(pBodyIndexColorPixels)
+			m_pHasBodyIndices(pHasBodyIndices)
 	{
 		m_iNumTrackedBodies = 0;
+		for(int i = 0; i < BODY_COUNT; i++)
+		{
+			pHasBodyIndices[i] = false;
+		}
 	}
 	~MultiSourceFrameWorker()
 	{
@@ -278,10 +282,13 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 						}
 						if (SUCCEEDED(hr))
 						{
+							//default transparent colors
+							for( int i = 0 ; i < BODY_COUNT ; i++ ) {
+								memset(m_pJSBodyFrame->bodies[i].colorPixels, 0, cColorWidth * cColorHeight * sizeof(RGBQUAD));
+							}
+
 							for (int colorIndex = 0; colorIndex < (nColorWidth*nColorHeight); ++colorIndex)
 							{
-								// default transparent color
-								m_pBodyIndexColorPixels[colorIndex] = {0};
 
 								DepthSpacePoint p = m_pDepthCoordinatesForColor[colorIndex];
 
@@ -298,8 +305,9 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 										// if we're tracking a player for the current pixel, draw from the color camera
 										if (player != 0xff)
 										{
+											m_pHasBodyIndices[player] = true;
 											// set source for copy to the color pixel
-											m_pBodyIndexColorPixels[colorIndex] = pColorBuffer[colorIndex];
+											m_pJSBodyFrame->bodies[player].colorPixels[colorIndex] = pColorBuffer[colorIndex];
 										}
 									}
 								}
@@ -353,6 +361,8 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 					//body frame
 					if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
 					{
+						DepthSpacePoint depthPoint = {0};
+						ColorSpacePoint colorPoint = {0};
 						for (int i = 0; i < _countof(ppBodies); ++i)
 						{
 							IBody* pBody = ppBodies[i];
@@ -374,10 +384,7 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 									{
 										for (int j = 0; j < _countof(joints); ++j)
 										{
-											DepthSpacePoint depthPoint = {0};
 											m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
-
-											ColorSpacePoint colorPoint = {0};
 											m_pCoordinateMapper->MapCameraPointToColorSpace(joints[j].Position, &colorPoint);
 
 											m_pJSBodyFrame->bodies[i].joints[j].depthX = depthPoint.X / m_cDepthWidth;
@@ -512,7 +519,18 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 		if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
 		{
 			v8::Local<v8::Object> v8BodyIndexColorResult = NanNew<v8::Object>();
-			v8BodyIndexColorResult->Set(NanNew<v8::String>("buffer"), NanNewBufferHandle((char *)m_pBodyIndexColorPixels, m_cColorWidth * m_cColorHeight * sizeof(RGBQUAD)));
+
+			v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(BODY_COUNT);
+			for(int i = 0; i < BODY_COUNT; i++)
+			{
+				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
+				if(m_pHasBodyIndices[i]) {
+					v8body->Set(NanNew<v8::String>("buffer"), NanNewBufferHandle((char *)m_pJSBodyFrame->bodies[i].colorPixels, m_cColorWidth * m_cColorHeight * sizeof(RGBQUAD)));
+				}
+				v8bodies->Set(i, v8body);
+			}
+			v8BodyIndexColorResult->Set(NanNew<v8::String>("bodies"), v8bodies);
+
 			v8Result->Set(NanNew<v8::String>("bodyIndexColor"), v8BodyIndexColorResult);
 		}
 

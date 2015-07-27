@@ -28,6 +28,15 @@
 /// hard coded, as was done here, or calculated at runtime.
 #define InfraredSceneStandardDeviations 3.0f
 
+const int 							cDepthWidth  = 512;
+const int 							cDepthHeight = 424;
+const int 							cColorWidth  = 1920;
+const int 							cColorHeight = 1080;
+const int 							cInfraredWidth  = 512;
+const int 							cInfraredHeight = 424;
+const int 							cLongExposureInfraredWidth  = 512;
+const int 							cLongExposureInfraredHeight = 424;
+
 #ifndef _NodeKinect2FrameTypes_
 #define _NodeKinect2FrameTypes_
 typedef enum _NodeKinect2FrameTypes NodeKinect2FrameTypes;

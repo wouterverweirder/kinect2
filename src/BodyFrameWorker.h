@@ -67,6 +67,8 @@ class BodyFrameWorker : public NanAsyncWorker
 			if(SUCCEEDED(hr))
 			{
 				frameReadSucceeded = true;
+				DepthSpacePoint depthPoint = {0};
+				ColorSpacePoint colorPoint = {0};
 				for (int i = 0; i < _countof(ppBodies); ++i)
 				{
 					IBody* pBody = ppBodies[i];
@@ -88,10 +90,7 @@ class BodyFrameWorker : public NanAsyncWorker
 							{
 								for (int j = 0; j < _countof(joints); ++j)
 								{
-									DepthSpacePoint depthPoint = {0};
 									m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
-
-									ColorSpacePoint colorPoint = {0};
 									m_pCoordinateMapper->MapCameraPointToColorSpace(joints[j].Position, &colorPoint);
 
 									m_pJSBodyFrame->bodies[i].joints[j].depthX = depthPoint.X / m_cDepthWidth;

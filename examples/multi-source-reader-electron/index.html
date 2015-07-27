@@ -20,6 +20,7 @@
 		</style>
 	</head>
 	<body>
+		<h1 id="fps">0 fps</h1>
 		<canvas id="depthCanvas" width="512" height="424"></canvas>
 		<canvas id="colorCanvas" width="1920" height="1080"></canvas>
 		<script>
@@ -40,6 +41,7 @@
 			var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
 
 			var processing = false;
+			var i = 0;
 
 			if(kinect.open()) {
 				kinect.on('multiSourceFrame', function(err, frame){
@@ -52,7 +54,7 @@
 					var targetDepthPixels = depthImageData.data;
 					var sourceDepthPixels = new Uint8Array(frame.depth.buffer);
 					var depthPixelIndex = 0;
-					for (var i = 0; i < depthImageDataSize; i+=4) {
+					for (i = 0; i < depthImageDataSize; i+=4) {
 						targetDepthPixels[i] = sourceDepthPixels[depthPixelIndex];
 						targetDepthPixels[i+1] = sourceDepthPixels[depthPixelIndex];
 						targetDepthPixels[i+2] = sourceDepthPixels[depthPixelIndex];
@@ -61,13 +63,29 @@
 					}
 					depthCtx.putImageData(depthImageData, 0, 0);
 
+					//show color pixels of first user we find
+					colorCtx.clearRect (0, 0, colorCanvas.width, colorCanvas.height);
+					for (var player = 0; player < frame.bodyIndexColor.bodies.length; player++) {
+						if(frame.bodyIndexColor.bodies[player].buffer) {
+							var targetColorPixels = colorImageData.data;
+							var sourceColorPixels = new Uint8Array(frame.bodyIndexColor.bodies[player].buffer);
+							for (i = 0; i < colorImageDataSize; i++) {
+								targetColorPixels[i] = sourceColorPixels[i];
+							}
+							colorCtx.putImageData(colorImageData, 0, 0);
+							break;
+						}
+					}
+
+					/*
 					//color
 					var targetColorPixels = colorImageData.data;
-					var sourceColorPixels = new Uint8Array(frame.bodyIndexColor.buffer);
-					for (var i = 0; i < colorImageDataSize; i++) {
+					var sourceColorPixels = new Uint8Array(frame.color.buffer);
+					for (i = 0; i < colorImageDataSize; i++) {
 						targetColorPixels[i] = sourceColorPixels[i];
 					}
 					colorCtx.putImageData(colorImageData, 0, 0);
+					*/
 
 					//body
 					var index = 0;
@@ -89,10 +107,38 @@
 				});
 
 				kinect.openMultiSourceReader({
-					frameTypes: Kinect2.FrameTypes.BodyIndexColor | Kinect2.FrameTypes.Depth | Kinect2.FrameTypes.Body
+					frameTypes: Kinect2.FrameTypes.Depth | Kinect2.FrameTypes.Body | Kinect2.FrameTypes.BodyIndexColor
 				});
 			}
 		})();
+		</script>
+		<script>
+		//browser fps calc http://jsfiddle.net/krnlde/u1fL1cs5/
+		var fpsEl = document.getElementById('fps');
+		window.countFPS = (function () {
+		  var lastLoop = (new Date()).getMilliseconds();
+		  var count = 1;
+		  var fps = 0;
+
+		  return function () {
+		    var currentLoop = (new Date()).getMilliseconds();
+		    if (lastLoop > currentLoop) {
+		      fps = count;
+		      count = 1;
+		    } else {
+		      count += 1;
+		    }
+		    lastLoop = currentLoop;
+		    return fps;
+		  };
+		}());
+
+		(function loop() {
+		    requestAnimationFrame(function () {
+		      fpsEl.innerHTML = countFPS();
+		      loop();
+		    });
+		}());
 		</script>
 	</body>
 </html>

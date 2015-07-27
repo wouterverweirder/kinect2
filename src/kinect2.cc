@@ -22,27 +22,14 @@ IInfraredFrameReader* 							m_pInfraredFrameReader;
 ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader;
 IMultiSourceFrameReader*						m_pMultiSourceFrameReader;
 
-const int 							cDepthWidth  = 512;
-const int 							cDepthHeight = 424;
 char*										m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
-
-const int 							cColorWidth  = 1920;
-const int 							cColorHeight = 1080;
 RGBQUAD*								m_pColorRGBX = new RGBQUAD[cColorWidth * cColorHeight];
-
-const int 							cInfraredWidth  = 512;
-const int 							cInfraredHeight = 424;
 char*										m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
-
-const int 							cLongExposureInfraredWidth  = 512;
-const int 							cLongExposureInfraredHeight = 424;
 char*										m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
-
 JSBodyFrame							m_jsBodyFrame;
+bool*										m_pHasBodyIndices = new bool[BODY_COUNT];
 
 DepthSpacePoint*				m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
-
-RGBQUAD*								m_pBodyIndexColorPixels = new RGBQUAD[cColorWidth * cColorHeight];
 
 //enabledFrameSourceTypes refers to the kinect SDK frame source types
 DWORD										m_enabledFrameSourceTypes = 0;
@@ -56,6 +43,9 @@ NanCallback*						m_pColorReaderCallback;
 NanCallback*						m_pInfraredReaderCallback;
 NanCallback*						m_pLongExposureInfraredReaderCallback;
 NanCallback*						m_pMultiSourceReaderCallback;
+
+//persistent handles for our big objects to prevent GC overload!
+//Persistent<Object> 			m_persistentColorPixels;
 
 uv_mutex_t							m_bodyReaderMutex;
 uv_mutex_t							m_depthReaderMutex;
@@ -590,7 +580,7 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 			m_pColorRGBX, cColorWidth, cColorHeight,
 			m_pDepthPixels, cDepthWidth, cDepthHeight,
 			&m_jsBodyFrame,
-			m_pBodyIndexColorPixels
+			m_pHasBodyIndices
 		));
 	}
 	else
@@ -628,7 +618,7 @@ NAN_METHOD(_MultiSourceFrameArrived)
 			m_pColorRGBX, cColorWidth, cColorHeight,
 			m_pDepthPixels, cDepthWidth, cDepthHeight,
 			&m_jsBodyFrame,
-			m_pBodyIndexColorPixels
+			m_pHasBodyIndices
 		));
 	}
 }
@@ -646,12 +636,27 @@ NAN_METHOD(CloseMultiSourceReaderFunction)
 
 void Init(Handle<Object> exports)
 {
+	NanScope();
+
 	uv_mutex_init(&m_bodyReaderMutex);
 	uv_mutex_init(&m_depthReaderMutex);
 	uv_mutex_init(&m_colorReaderMutex);
 	uv_mutex_init(&m_infraredReaderMutex);
 	uv_mutex_init(&m_longExposureInfraredReaderMutex);
 	uv_mutex_init(&m_multiSourceReaderMutex);
+
+	//persistent object creation
+	/*
+	Local<Object> obj = NanNew<Object>();
+	obj->Set(NanNew<String>("key"), keyHandle); // where keyHandle might be a Local<String>
+	NanAssignPersistent(persistentHandle, obj)
+	*/
+
+	//v8::Local<v8::Object> obj = NanNew<v8::Object>();
+	//NanAssignPersistent(m_persistentColorPixels, obj);
+	//NanNew(m_persistentColorPixels)->Set(0, NanNewBufferHandle((char *)m_pColorRGBX, cColorWidth * cColorHeight * sizeof(RGBQUAD)));
+
+	//disposing should happen with NanDisposePersistent(handle);
 
 	exports->Set(NanNew<String>("open"),
 		NanNew<FunctionTemplate>(OpenFunction)->GetFunction());

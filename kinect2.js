@@ -1,7 +1,7 @@
 var events = require('events'),
 	util = require('util');
 
-function Kinect2(options) {
+function Kinect2() {
 	events.EventEmitter.call(this);
 
 	this.nativeKinect2 = require('./build/Release/kinect2');
@@ -16,7 +16,7 @@ Kinect2.FrameTypes = {
 	LongExposureInfrared						: 0x4, //Not Implemented Yet
 	Depth														: 0x8,
 	BodyIndex												: 0x10, //Not Implemented Yet
-	Body														: 0x20, //Not Implemented Yet
+	Body														: 0x20,
 	Audio														: 0x40, //Not Implemented Yet
 	BodyIndexColor									: 0x80,
 	BodyIndexDepth									: 0x10, //Same as BodyIndex

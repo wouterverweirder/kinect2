@@ -1,6 +1,8 @@
 #ifndef Kinect2_Structs_h
 #define Kinect2_Structs_h
 
+#include "Globals.h"
+
 typedef struct _JSJoint
 {
 	float depthX;
@@ -18,6 +20,10 @@ typedef struct _JSBody
 	bool tracked;
 	UINT64 trackingId;
 	JSJoint joints[JointType_Count];
+	RGBQUAD colorPixels[cColorWidth * cColorHeight];
+	char depthPixels[cDepthWidth * cDepthHeight];
+	char infraredPixels[cInfraredWidth * cInfraredHeight];
+	char longExposureInfraredPixels[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
 } JSBody;
 
 typedef struct _JSBodyFrame
