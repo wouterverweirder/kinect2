@@ -12,16 +12,33 @@ class BodyFrameWorker : public NanAsyncWorker
 	uv_mutex_t* 					m_pMutex;
 	ICoordinateMapper*		m_pCoordinateMapper;
 	IBodyFrameReader*			m_pBodyFrameReader;
-	JSBodyFrame*					bodyFrame;
+	JSBodyFrame*					m_pJSBodyFrame;
 	int										numTrackedBodies;
-	BodyFrameWorker(NanCallback *callback, uv_mutex_t* pMutex, ICoordinateMapper *pCoordinateMapper, IBodyFrameReader *pBodyFrameReader)
-		: NanAsyncWorker(callback), m_pMutex(pMutex), m_pCoordinateMapper(pCoordinateMapper), m_pBodyFrameReader(pBodyFrameReader), numTrackedBodies(0)
+
+	int 									m_cDepthWidth;
+	int 									m_cDepthHeight;
+	int 									m_cColorWidth;
+	int 									m_cColorHeight;
+
+	BodyFrameWorker(
+		NanCallback *callback,
+		uv_mutex_t* pMutex,
+		ICoordinateMapper *pCoordinateMapper,
+		IBodyFrameReader *pBodyFrameReader,
+		JSBodyFrame *pJSBodyFrame,
+		int cColorWidth, int cColorHeight,
+		int cDepthWidth, int cDepthHeight
+	)
+		:
+		NanAsyncWorker(callback),
+		m_pMutex(pMutex),
+		m_pCoordinateMapper(pCoordinateMapper),
+		m_pBodyFrameReader(pBodyFrameReader),
+		m_pJSBodyFrame(pJSBodyFrame),
+		m_cColorWidth(cColorWidth), m_cColorHeight(cColorHeight),
+		m_cDepthWidth(cDepthWidth), m_cDepthHeight(cDepthHeight)
 	{
-		bodyFrame = new JSBodyFrame();
-	}
-	~BodyFrameWorker()
-	{
-		delete bodyFrame;
+		numTrackedBodies = 0;
 	}
 
 	// Executed inside the worker-thread.
@@ -57,13 +74,13 @@ class BodyFrameWorker : public NanAsyncWorker
 					{
 						BOOLEAN bTracked = false;
 						hr = pBody->get_IsTracked(&bTracked);
-						bodyFrame->bodies[i].tracked = bTracked;
+						m_pJSBodyFrame->bodies[i].tracked = bTracked;
 						if(bTracked)
 						{
 							numTrackedBodies++;
 							UINT64 iTrackingId = 0;
 							hr = pBody->get_TrackingId(&iTrackingId);
-							bodyFrame->bodies[i].trackingId = iTrackingId;
+							m_pJSBodyFrame->bodies[i].trackingId = iTrackingId;
 							//go through the joints
 							Joint joints[JointType_Count];
 							hr = pBody->GetJoints(_countof(joints), joints);
@@ -74,15 +91,26 @@ class BodyFrameWorker : public NanAsyncWorker
 									DepthSpacePoint depthPoint = {0};
 									m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
 
-									bodyFrame->bodies[i].joints[j].x = depthPoint.X;
-									bodyFrame->bodies[i].joints[j].y = depthPoint.Y;
-									bodyFrame->bodies[i].joints[j].jointType = joints[j].JointType;
+									ColorSpacePoint colorPoint = {0};
+									m_pCoordinateMapper->MapCameraPointToColorSpace(joints[j].Position, &colorPoint);
+
+									m_pJSBodyFrame->bodies[i].joints[j].depthX = depthPoint.X / m_cDepthWidth;
+									m_pJSBodyFrame->bodies[i].joints[j].depthY = depthPoint.Y / m_cDepthHeight;
+
+									m_pJSBodyFrame->bodies[i].joints[j].colorX = colorPoint.X / m_cColorWidth;
+									m_pJSBodyFrame->bodies[i].joints[j].colorY = colorPoint.Y / m_cColorHeight;
+
+									m_pJSBodyFrame->bodies[i].joints[j].cameraX = joints[j].Position.X;
+									m_pJSBodyFrame->bodies[i].joints[j].cameraY = joints[j].Position.Y;
+									m_pJSBodyFrame->bodies[i].joints[j].cameraZ = joints[j].Position.Z;
+
+									m_pJSBodyFrame->bodies[i].joints[j].jointType = joints[j].JointType;
 								}
 							}
 						}
 						else
 						{
-							bodyFrame->bodies[i].trackingId = 0;
+							m_pJSBodyFrame->bodies[i].trackingId = 0;
 						}
 					}
 				}
@@ -111,20 +139,25 @@ class BodyFrameWorker : public NanAsyncWorker
 		int bodyIndex = 0;
 		for(int i = 0; i < BODY_COUNT; i++)
 		{
-			if(bodyFrame->bodies[i].tracked)
+			if(m_pJSBodyFrame->bodies[i].tracked)
 			{
 				//create a body object
 				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
-				v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(bodyFrame->bodies[i].trackingId)));
+				v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(m_pJSBodyFrame->bodies[i].trackingId)));
 
 				v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
 				//joints
-				for (int j = 0; j < _countof(bodyFrame->bodies[i].joints); ++j)
+				for (int j = 0; j < _countof(m_pJSBodyFrame->bodies[i].joints); ++j)
 				{
 					v8::Local<v8::Object> v8joint = NanNew<v8::Object>();
-					v8joint->Set(NanNew<v8::String>("x"), NanNew<v8::Number>(bodyFrame->bodies[i].joints[j].x));
-					v8joint->Set(NanNew<v8::String>("y"), NanNew<v8::Number>(bodyFrame->bodies[i].joints[j].y));
-					v8joints->Set(NanNew<v8::Number>(bodyFrame->bodies[i].joints[j].jointType), v8joint);
+					v8joint->Set(NanNew<v8::String>("depthX"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].depthX));
+					v8joint->Set(NanNew<v8::String>("depthY"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].depthY));
+					v8joint->Set(NanNew<v8::String>("colorX"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].colorX));
+					v8joint->Set(NanNew<v8::String>("colorY"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].colorY));
+					v8joint->Set(NanNew<v8::String>("cameraX"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].cameraX));
+					v8joint->Set(NanNew<v8::String>("cameraY"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].cameraY));
+					v8joint->Set(NanNew<v8::String>("cameraZ"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].cameraZ));
+					v8joints->Set(NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].jointType), v8joint);
 				}
 				v8body->Set(NanNew<v8::String>("joints"), v8joints);
 

@@ -24,6 +24,9 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 	int 												m_cDepthWidth;
 	int 												m_cDepthHeight;
 
+	JSBodyFrame*								m_pJSBodyFrame;
+	int													m_iNumTrackedBodies;
+
 	DepthSpacePoint*						m_pDepthCoordinatesForColor;
 
 	RGBQUAD*										m_pBodyIndexColorPixels;
@@ -38,6 +41,7 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 			DepthSpacePoint* pDepthCoordinatesForColor,
 			RGBQUAD* pColorPixels, int cColorWidth, int cColorHeight,
 			char* pDepthPixels, int cDepthWidth, int cDepthHeight,
+			JSBodyFrame* pJSBodyFrame,
 			RGBQUAD* pBodyIndexColorPixels
 		)
 		:
@@ -50,8 +54,10 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 			m_pDepthCoordinatesForColor(pDepthCoordinatesForColor),
 			m_pColorPixels(pColorPixels), m_cColorWidth(cColorWidth), m_cColorHeight(cColorHeight),
 			m_pDepthPixels(pDepthPixels), m_cDepthWidth(cDepthWidth), m_cDepthHeight(cDepthHeight),
+			m_pJSBodyFrame(pJSBodyFrame),
 			m_pBodyIndexColorPixels(pBodyIndexColorPixels)
 	{
+		m_iNumTrackedBodies = 0;
 	}
 	~MultiSourceFrameWorker()
 	{
@@ -110,6 +116,7 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 
 				IBodyFrameReference* pBodyFrameReference = NULL;
 				IBodyFrame* pBodyFrame = NULL;
+				IBody* ppBodies[BODY_COUNT] = {0};
 
 				if(FrameSourceTypes::FrameSourceTypes_Color & m_enabledFrameSourceTypes)
 				{
@@ -235,6 +242,10 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 					{
 						hr = pBodyFrameReference->AcquireFrame(&pBodyFrame);
 					}
+					if(SUCCEEDED(hr))
+					{
+						hr = pBodyFrame->GetAndRefreshBodyData(_countof(ppBodies), ppBodies);
+					}
 				}
 
 				//process data according to requested frame types
@@ -335,10 +346,65 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 					}
 				}
 
-				//todo: add raw depth to above
+				//todo: add raw depth & body index depth to above
+
+				if(FrameSourceTypes::FrameSourceTypes_Body & m_enabledFrameSourceTypes)
+				{
+					//body frame
+					if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
+					{
+						for (int i = 0; i < _countof(ppBodies); ++i)
+						{
+							IBody* pBody = ppBodies[i];
+							if (pBody)
+							{
+								BOOLEAN bTracked = false;
+								hr = pBody->get_IsTracked(&bTracked);
+								m_pJSBodyFrame->bodies[i].tracked = bTracked;
+								if(bTracked)
+								{
+									m_iNumTrackedBodies++;
+									UINT64 iTrackingId = 0;
+									hr = pBody->get_TrackingId(&iTrackingId);
+									m_pJSBodyFrame->bodies[i].trackingId = iTrackingId;
+									//go through the joints
+									Joint joints[JointType_Count];
+									hr = pBody->GetJoints(_countof(joints), joints);
+									if (SUCCEEDED(hr))
+									{
+										for (int j = 0; j < _countof(joints); ++j)
+										{
+											DepthSpacePoint depthPoint = {0};
+											m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
+
+											ColorSpacePoint colorPoint = {0};
+											m_pCoordinateMapper->MapCameraPointToColorSpace(joints[j].Position, &colorPoint);
+
+											m_pJSBodyFrame->bodies[i].joints[j].depthX = depthPoint.X / m_cDepthWidth;
+											m_pJSBodyFrame->bodies[i].joints[j].depthY = depthPoint.Y / m_cDepthHeight;
+
+											m_pJSBodyFrame->bodies[i].joints[j].colorX = colorPoint.X / m_cColorWidth;
+											m_pJSBodyFrame->bodies[i].joints[j].colorY = colorPoint.Y / m_cColorHeight;
+
+											m_pJSBodyFrame->bodies[i].joints[j].cameraX = joints[j].Position.X;
+											m_pJSBodyFrame->bodies[i].joints[j].cameraY = joints[j].Position.Y;
+											m_pJSBodyFrame->bodies[i].joints[j].cameraZ = joints[j].Position.Z;
+
+											m_pJSBodyFrame->bodies[i].joints[j].jointType = joints[j].JointType;
+										}
+									}
+								}
+								else
+								{
+									m_pJSBodyFrame->bodies[i].trackingId = 0;
+								}
+							}
+						}
+					}
+				}
+
 				//todo: infrared
 				//todo: long exposure infrared
-				//todo: body
 
 				//release memory
 				SafeRelease(pColorFrameDescription);
@@ -359,8 +425,13 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 				SafeRelease(pBodyIndexFrame);
 				SafeRelease(pBodyIndexFrameReference);
 
+				for (int i = 0; i < _countof(ppBodies); ++i)
+				{
+					SafeRelease(ppBodies[i]);
+				}
 				SafeRelease(pBodyFrame);
 				SafeRelease(pBodyFrameReference);
+
 			}
 
 			if(SUCCEEDED(hr))
@@ -397,6 +468,45 @@ class MultiSourceFrameWorker : public NanAsyncWorker
 			v8::Local<v8::Object> v8DepthResult = NanNew<v8::Object>();
 			v8DepthResult->Set(NanNew<v8::String>("buffer"), NanNewBufferHandle((char *)m_pDepthPixels, m_cDepthWidth * m_cDepthHeight * sizeof(char)));
 			v8Result->Set(NanNew<v8::String>("depth"), v8DepthResult);
+		}
+
+		if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
+		{
+			v8::Local<v8::Object> v8BodyResult = NanNew<v8::Object>();
+
+			v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(m_iNumTrackedBodies);
+			int bodyIndex = 0;
+			for(int i = 0; i < BODY_COUNT; i++)
+			{
+				if(m_pJSBodyFrame->bodies[i].tracked)
+				{
+					//create a body object
+					v8::Local<v8::Object> v8body = NanNew<v8::Object>();
+					v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(m_pJSBodyFrame->bodies[i].trackingId)));
+
+					v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
+					//joints
+					for (int j = 0; j < _countof(m_pJSBodyFrame->bodies[i].joints); ++j)
+					{
+						v8::Local<v8::Object> v8joint = NanNew<v8::Object>();
+						v8joint->Set(NanNew<v8::String>("depthX"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].depthX));
+						v8joint->Set(NanNew<v8::String>("depthY"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].depthY));
+						v8joint->Set(NanNew<v8::String>("colorX"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].colorX));
+						v8joint->Set(NanNew<v8::String>("colorY"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].colorY));
+						v8joint->Set(NanNew<v8::String>("cameraX"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].cameraX));
+						v8joint->Set(NanNew<v8::String>("cameraY"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].cameraY));
+						v8joint->Set(NanNew<v8::String>("cameraZ"), NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].cameraZ));
+						v8joints->Set(NanNew<v8::Number>(m_pJSBodyFrame->bodies[i].joints[j].jointType), v8joint);
+					}
+					v8body->Set(NanNew<v8::String>("joints"), v8joints);
+
+					v8bodies->Set(bodyIndex, v8body);
+					bodyIndex++;
+				}
+			}
+			v8BodyResult->Set(NanNew<v8::String>("bodies"), v8bodies);
+
+			v8Result->Set(NanNew<v8::String>("body"), v8BodyResult);
 		}
 
 		if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)

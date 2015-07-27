@@ -38,6 +38,8 @@ const int 							cLongExposureInfraredWidth  = 512;
 const int 							cLongExposureInfraredHeight = 424;
 char*										m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
 
+JSBodyFrame							m_jsBodyFrame;
+
 DepthSpacePoint*				m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
 
 RGBQUAD*								m_pBodyIndexColorPixels = new RGBQUAD[cColorWidth * cColorHeight];
@@ -183,7 +185,15 @@ NAN_METHOD(OpenBodyReaderFunction)
 		{
 			//start async worker
 			NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
-			NanAsyncQueueWorker(new BodyFrameWorker(callback, &m_bodyReaderMutex, m_pCoordinateMapper, m_pBodyFrameReader));
+			NanAsyncQueueWorker(new BodyFrameWorker(
+				callback,
+				&m_bodyReaderMutex,
+				m_pCoordinateMapper,
+				m_pBodyFrameReader,
+				&m_jsBodyFrame,
+				cColorWidth, cColorHeight,
+				cDepthWidth, cDepthHeight
+			));
 		}
 	}
 	else
@@ -209,7 +219,15 @@ NAN_METHOD(_BodyFrameArrived)
 	if(m_pBodyFrameReader != NULL)
 	{
 		NanCallback *callback = new NanCallback(NanNew<FunctionTemplate>(_BodyFrameArrived)->GetFunction());
-		NanAsyncQueueWorker(new BodyFrameWorker(callback, &m_bodyReaderMutex, m_pCoordinateMapper, m_pBodyFrameReader));
+		NanAsyncQueueWorker(new BodyFrameWorker(
+			callback,
+			&m_bodyReaderMutex,
+			m_pCoordinateMapper,
+			m_pBodyFrameReader,
+			&m_jsBodyFrame,
+			cColorWidth, cColorHeight,
+			cDepthWidth, cDepthHeight
+		));
 	}
 }
 
@@ -571,6 +589,7 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 			m_pDepthCoordinatesForColor,
 			m_pColorRGBX, cColorWidth, cColorHeight,
 			m_pDepthPixels, cDepthWidth, cDepthHeight,
+			&m_jsBodyFrame,
 			m_pBodyIndexColorPixels
 		));
 	}
@@ -608,6 +627,7 @@ NAN_METHOD(_MultiSourceFrameArrived)
 			m_pDepthCoordinatesForColor,
 			m_pColorRGBX, cColorWidth, cColorHeight,
 			m_pDepthPixels, cDepthWidth, cDepthHeight,
+			&m_jsBodyFrame,
 			m_pBodyIndexColorPixels
 		));
 	}

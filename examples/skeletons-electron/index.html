@@ -46,7 +46,7 @@
 						for(var jointName in body.joints) {
 							var joint = body.joints[jointName];
 							ctx.fillStyle = colors[index];
-							ctx.fillRect(joint.x, joint.y, 10, 10);
+							ctx.fillRect(joint.depthX * 512, joint.depthY * 424, 10, 10);
 						}
 						index++;
 					});

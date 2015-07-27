@@ -37,6 +37,8 @@
 			var colorImageData = colorCtx.createImageData(colorCanvas.width, colorCanvas.height);
 			var colorImageDataSize = colorImageData.data.length;
 
+			var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
+
 			var processing = false;
 
 			if(kinect.open()) {
@@ -67,12 +69,27 @@
 					}
 					colorCtx.putImageData(colorImageData, 0, 0);
 
+					//body
+					var index = 0;
+					frame.body.bodies.forEach(function(body){
+						for(var jointName in body.joints) {
+							var joint = body.joints[jointName];
+
+							depthCtx.fillStyle = colors[index];
+							depthCtx.fillRect(joint.depthX * 512, joint.depthY * 424, 10, 10);
+
+							colorCtx.fillStyle = colors[index];
+							colorCtx.fillRect(joint.colorX * 1920, joint.colorY * 1080, 10, 10);
+						}
+						index++;
+					});
+
 					//processing done
 					processing = false;
 				});
 
 				kinect.openMultiSourceReader({
-					frameTypes: Kinect2.FrameTypes.BodyIndexColor | Kinect2.FrameTypes.Depth
+					frameTypes: Kinect2.FrameTypes.BodyIndexColor | Kinect2.FrameTypes.Depth | Kinect2.FrameTypes.Body
 				});
 			}
 		})();

@@ -3,8 +3,13 @@
 
 typedef struct _JSJoint
 {
-	float x;
-	float y;
+	float depthX;
+	float depthY;
+	float colorX;
+	float colorY;
+	float cameraX;
+	float cameraY;
+	float cameraZ;
 	int jointType;
 } JSJoint;
 
