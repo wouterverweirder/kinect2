@@ -26,7 +26,15 @@ Kinect2.FrameTypes = {
 };
 
 Kinect2.prototype.open = function() {
+	//cheap way of preventing application exit
+	this._openIntervalId = setInterval(function(){}, 1000);
 	return this.nativeKinect2.open();
+};
+
+Kinect2.prototype.close = function() {
+	//todo: add callback function so that kinect property closes
+	clearInterval(this._openIntervalId);
+	return this.nativeKinect2.close();
 };
 
 Kinect2.prototype.openMultiSourceReader = function(options) {
@@ -80,10 +88,6 @@ Kinect2.prototype.closeBodyReader = function() {
 	return this.nativeKinect2.closeBodyReader();
 };
 
-Kinect2.prototype.close = function() {
-	return this.nativeKinect2.close();
-};
-
 Kinect2.prototype.logCallback = function(msg) {
 	console.log('[Kinect2]', msg);
 };
@@ -108,8 +112,8 @@ Kinect2.prototype.longExposureInfraredFrameCallback = function(data) {
 	this.emit('longExposureInfraredFrame', data);
 };
 
-Kinect2.prototype.multiSourceFrameCallback = function(err, frame) {
-	this.emit('multiSourceFrame', err, frame);
+Kinect2.prototype.multiSourceFrameCallback = function(frame) {
+	this.emit('multiSourceFrame', frame);
 };
 
 module.exports = Kinect2;

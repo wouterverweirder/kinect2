@@ -44,8 +44,8 @@
 			var i = 0;
 
 			if(kinect.open()) {
-				kinect.on('multiSourceFrame', function(err, frame){
-					if(processing || err) {
+				kinect.on('multiSourceFrame', function(frame){
+					if(processing) {
 						return;
 					}
 					processing = true;
