@@ -5,28 +5,31 @@
 (function(){
 
 	var imageData;
+	var imageDataSize;
 
 	function init() {
 		addEventListener('message', function (event) {
-			switch (event.data.message) {
-				case "setImageData":
-					imageData = event.data.imageData;
-					break;
-				case "processImageData":
-					processImageData(event.data.imageBuffer);
-					break;
+			if(!imageData)
+			{
+				imageData = event.data;
+				imageDataSize = imageData.data.length;
+			}
+			else
+			{
+				processImageData(event.data);
 			}
 		});
 	}
 
-	//newPixelData is Uint8Array() in RGBA format
+	//newPixelData is an ArrayBuffer with RGBA Data
 	function processImageData(newPixelData) {
+		//create new Uint8Array to be able to read from the ArrayBuffer
+		var newPixelData = new Uint8Array(newPixelData);
 		var pixelArray = imageData.data;
-		var imageDataSize = imageData.data.length;
 		for (var i = 0; i < imageDataSize; i++) {
 			imageData.data[i] = newPixelData[i];
 		}
-		self.postMessage({ "message": "imageReady", "imageData": imageData });
+		self.postMessage(imageData);
 	}
 
 	init();

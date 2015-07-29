@@ -61,18 +61,14 @@
 			var colorImageDataSize = colorImageData.data.length;
 			var colorProcessing = false;
 			var colorWorkerThread = new Worker("js/colorworker.js");
+			var colorPixels = new Uint8Array(colorCanvas.width * colorCanvas.height * 4);
 			colorWorkerThread.addEventListener("message", function (event) {
-				if(event.data.message === 'imageReady') {
-					colorCtx.clearRect (0, 0, colorCanvas.width, colorCanvas.height);
-					colorCtx.putImageData(event.data.imageData, 0, 0);
-					drawSkeletons(currentFrame);
-					colorProcessing = false;
-				}
+				colorCtx.clearRect (0, 0, colorCanvas.width, colorCanvas.height);
+				colorCtx.putImageData(event.data, 0, 0);
+				drawSkeletons(currentFrame);
+				colorProcessing = false;
 			});
-			colorWorkerThread.postMessage({
-				"message": "setImageData",
-				"imageData": colorImageData
-			});
+			colorWorkerThread.postMessage(colorImageData);
 
 			var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
 			var i = 0;
@@ -96,10 +92,14 @@
 
 					//show color pixels of first user we find
 					if(!colorProcessing) {
+						//player
 						for (var player = 0; player < frame.bodyIndexColor.bodies.length; player++) {
 							if(frame.bodyIndexColor.bodies[player].buffer) {
 								colorProcessing = true;
-								colorWorkerThread.postMessage({ "message": "processImageData", "imageBuffer": new Uint8Array(frame.bodyIndexColor.bodies[player].buffer) });
+								//copy Buffer into Uint8Array
+								colorPixels = new Uint8Array(frame.bodyIndexColor.bodies[player].buffer);
+								//transferable object to worker thread
+								colorWorkerThread.postMessage(colorPixels.buffer, [colorPixels.buffer]);
 								break;
 							}
 						}
@@ -112,9 +112,6 @@
 
 					//body
 					drawSkeletons(frame);
-
-					//processing done
-					processing = false;
 				});
 
 				kinect.openMultiSourceReader({
