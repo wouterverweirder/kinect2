@@ -18,6 +18,7 @@ typedef struct _JSJoint
 typedef struct _JSBody
 {
 	bool tracked;
+	bool hasPixels;
 	UINT64 trackingId;
 	JSJoint joints[JointType_Count];
 	RGBQUAD colorPixels[cColorWidth * cColorHeight];

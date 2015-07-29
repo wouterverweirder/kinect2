@@ -23,7 +23,6 @@ char*										m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
 JSBodyFrame							m_jsBodyFrame;
 int 										numTrackedBodies = 0;
 
-bool*										m_pHasBodyIndices = new bool[BODY_COUNT];
 DepthSpacePoint*				m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
 
 //enabledFrameSourceTypes refers to the kinect SDK frame source types
@@ -73,6 +72,7 @@ bool 										m_bBodyThreadRunning = false;
 uv_async_t							m_aMultiSourceAsync;
 uv_thread_t							m_tMultiSourceThread;
 bool 										m_bMultiSourceThreadRunning = false;
+Persistent<Object>			m_persistentBodyIndexColorPixels;
 
 NAN_METHOD(OpenFunction)
 {
@@ -1027,12 +1027,23 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 		{
 			v8::Local<v8::Object> v8BodyIndexColorResult = NanNew<v8::Object>();
 
+			//persistent handle of array with color buffers
+			v8::Local<v8::Object> v8BodyIndexColorPixels = NanNew(m_persistentBodyIndexColorPixels);
+
 			v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(BODY_COUNT);
+			int numBodiesWithPixels = 0;
 			for(int i = 0; i < BODY_COUNT; i++)
 			{
 				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
-				if(m_pHasBodyIndices[i]) {
-					v8body->Set(NanNew<v8::String>("buffer"), NanNewBufferHandle((char *)m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)));
+				//something weird is going on: every x frames hasPixels is false, but body is still tracked?
+				if(m_jsBodyFrame.bodies[i].hasPixels || m_jsBodyFrame.bodies[i].tracked) {
+					numBodiesWithPixels++;
+					//reuse the existing buffer
+					v8::Local<v8::Value> v8ColorPixels = v8BodyIndexColorPixels->Get(i);
+					char* data = node::Buffer::Data(v8ColorPixels);
+					size_t len = node::Buffer::Length(v8ColorPixels);
+					memcpy(data, m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
+					v8body->Set(NanNew<v8::String>("buffer"), v8ColorPixels);
 				}
 				v8bodies->Set(i, v8body);
 			}
@@ -1104,7 +1115,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 			BYTE *pBodyIndexBuffer = NULL;
 			for(int i = 0; i < BODY_COUNT; i++)
 			{
-				m_pHasBodyIndices[i] = false;
+				m_jsBodyFrame.bodies[i].hasPixels = false;
 			}
 
 			IBodyFrameReference* pBodyFrameReference = NULL;
@@ -1295,7 +1306,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 									// if we're tracking a player for the current pixel, draw from the color camera
 									if (player != 0xff)
 									{
-										m_pHasBodyIndices[player] = true;
+										m_jsBodyFrame.bodies[player].hasPixels = true;
 										// set source for copy to the color pixel
 										m_jsBodyFrame.bodies[player].colorPixels[colorIndex] = pColorBuffer[colorIndex];
 									}
@@ -1574,6 +1585,12 @@ void Init(Handle<Object> exports)
 	//multisource
 	uv_mutex_init(&m_mMultiSourceReaderMutex);
 	uv_async_init(uv_default_loop(), &m_aMultiSourceAsync, MultiSourceProgress_);
+	v8::Local<v8::Object> v8BodyIndexColorPixels = NanNew<v8::Object>();
+	for(int i = 0; i < BODY_COUNT; i++)
+	{
+		v8BodyIndexColorPixels->Set(i, NanNewBufferHandle((char *)m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)));
+	}
+	NanAssignPersistent(m_persistentBodyIndexColorPixels, v8BodyIndexColorPixels);
 
 	//disposing should happen with NanDisposePersistent(handle);
 

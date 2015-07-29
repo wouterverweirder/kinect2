@@ -4,114 +4,22 @@
 		<title>Hello World!</title>
 		<style>
 		html, body {
-			height: 100%;
+			min-height: 100%;
 		}
 		body {
 			background: linear-gradient(to bottom, #f2f9fe 0%,#d6f0fd 100%);
 		}
-		canvas {
-			display: inline-block;
-		}
-		#colorCanvas {
-			/* rescale color canvas to height of depth canvas */
-			width: 754px;
-			height: 424px;
+		#fps {
+			position: absolute;
+			top: 0;
+			left: 0;
+			background: white;
 		}
 		</style>
 	</head>
 	<body>
 		<h1 id="fps">0 fps</h1>
-		<canvas id="depthCanvas" width="512" height="424"></canvas>
 		<canvas id="colorCanvas" width="1920" height="1080"></canvas>
-		<script>
-		(function(){
-			var Kinect2 = require('../../kinect2');
-			var kinect = new Kinect2();
-
-			var depthCanvas = document.getElementById('depthCanvas');
-			var depthCtx = depthCanvas.getContext('2d');
-			var depthImageData = depthCtx.createImageData(depthCanvas.width, depthCanvas.height);
-			var depthImageDataSize = depthImageData.data.length;
-
-			var colorCanvas = document.getElementById('colorCanvas');
-			var colorCtx = colorCanvas.getContext('2d');
-			var colorImageData = colorCtx.createImageData(colorCanvas.width, colorCanvas.height);
-			var colorImageDataSize = colorImageData.data.length;
-
-			var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
-
-			var processing = false;
-			var i = 0;
-
-			if(kinect.open()) {
-				kinect.on('multiSourceFrame', function(frame){
-					if(processing) {
-						return;
-					}
-					processing = true;
-
-					//depth
-					var targetDepthPixels = depthImageData.data;
-					var sourceDepthPixels = new Uint8Array(frame.depth.buffer);
-					var depthPixelIndex = 0;
-					for (i = 0; i < depthImageDataSize; i+=4) {
-						targetDepthPixels[i] = sourceDepthPixels[depthPixelIndex];
-						targetDepthPixels[i+1] = sourceDepthPixels[depthPixelIndex];
-						targetDepthPixels[i+2] = sourceDepthPixels[depthPixelIndex];
-						targetDepthPixels[i+3] = 0xff;
-						depthPixelIndex++;
-					}
-					depthCtx.putImageData(depthImageData, 0, 0);
-
-					//show color pixels of first user we find
-					colorCtx.clearRect (0, 0, colorCanvas.width, colorCanvas.height);
-					for (var player = 0; player < frame.bodyIndexColor.bodies.length; player++) {
-						if(frame.bodyIndexColor.bodies[player].buffer) {
-							var targetColorPixels = colorImageData.data;
-							var sourceColorPixels = new Uint8Array(frame.bodyIndexColor.bodies[player].buffer);
-							for (i = 0; i < colorImageDataSize; i++) {
-								targetColorPixels[i] = sourceColorPixels[i];
-							}
-							colorCtx.putImageData(colorImageData, 0, 0);
-							break;
-						}
-					}
-
-					/*
-					//color
-					var targetColorPixels = colorImageData.data;
-					var sourceColorPixels = new Uint8Array(frame.color.buffer);
-					for (i = 0; i < colorImageDataSize; i++) {
-						targetColorPixels[i] = sourceColorPixels[i];
-					}
-					colorCtx.putImageData(colorImageData, 0, 0);
-					*/
-
-					//body
-					var index = 0;
-					frame.body.bodies.forEach(function(body){
-						for(var jointName in body.joints) {
-							var joint = body.joints[jointName];
-
-							depthCtx.fillStyle = colors[index];
-							depthCtx.fillRect(joint.depthX * 512, joint.depthY * 424, 10, 10);
-
-							colorCtx.fillStyle = colors[index];
-							colorCtx.fillRect(joint.colorX * 1920, joint.colorY * 1080, 10, 10);
-						}
-						index++;
-					});
-
-					//processing done
-					processing = false;
-				});
-
-				kinect.openMultiSourceReader({
-					frameTypes: Kinect2.FrameTypes.Depth | Kinect2.FrameTypes.Body | Kinect2.FrameTypes.BodyIndexColor
-				});
-			}
-		})();
-		</script>
 		<script>
 		//browser fps calc http://jsfiddle.net/krnlde/u1fL1cs5/
 		var fpsEl = document.getElementById('fps');
@@ -132,13 +40,88 @@
 		    return fps;
 		  };
 		}());
-
 		(function loop() {
-		    requestAnimationFrame(function () {
-		      fpsEl.innerHTML = countFPS();
-		      loop();
-		    });
+			requestAnimationFrame(function () {
+				fpsEl.innerHTML = countFPS() + ' fps';
+				loop();
+			});
 		}());
+		</script>
+		<script>
+
+		(function(){
+			var Kinect2 = require('../../kinect2');
+			var kinect = new Kinect2();
+
+			var currentFrame;
+
+			var colorCanvas = document.getElementById('colorCanvas');
+			var colorCtx = colorCanvas.getContext('2d');
+			var colorImageData = colorCtx.createImageData(colorCanvas.width, colorCanvas.height);
+			var colorImageDataSize = colorImageData.data.length;
+			var colorProcessing = false;
+			var colorWorkerThread = new Worker("js/colorworker.js");
+			colorWorkerThread.addEventListener("message", function (event) {
+				if(event.data.message === 'imageReady') {
+					colorCtx.clearRect (0, 0, colorCanvas.width, colorCanvas.height);
+					colorCtx.putImageData(event.data.imageData, 0, 0);
+					drawSkeletons(currentFrame);
+					colorProcessing = false;
+				}
+			});
+			colorWorkerThread.postMessage({
+				"message": "setImageData",
+				"imageData": colorImageData
+			});
+
+			var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
+			var i = 0;
+
+			function drawSkeletons(frame) {
+				var index = 0;
+				frame.body.bodies.forEach(function(body){
+					for(var jointName in body.joints) {
+						var joint = body.joints[jointName];
+
+						colorCtx.fillStyle = colors[index];
+						colorCtx.fillRect(joint.colorX * 1920, joint.colorY * 1080, 10, 10);
+					}
+					index++;
+				});
+			}
+
+			if(kinect.open()) {
+				kinect.on('multiSourceFrame', function(frame){
+					currentFrame = frame;
+
+					//show color pixels of first user we find
+					if(!colorProcessing) {
+						for (var player = 0; player < frame.bodyIndexColor.bodies.length; player++) {
+							if(frame.bodyIndexColor.bodies[player].buffer) {
+								colorProcessing = true;
+								colorWorkerThread.postMessage({ "message": "processImageData", "imageBuffer": new Uint8Array(frame.bodyIndexColor.bodies[player].buffer) });
+								break;
+							}
+						}
+						if(!colorProcessing)
+						{
+							//still not processing -> no body has been found, clear the canvas
+							colorCtx.clearRect(0, 0, colorCanvas.width, colorCanvas.height);
+						}
+					}
+
+					//body
+					drawSkeletons(frame);
+
+					//processing done
+					processing = false;
+				});
+
+				kinect.openMultiSourceReader({
+					frameTypes: Kinect2.FrameTypes.Body | Kinect2.FrameTypes.BodyIndexColor
+				});
+			}
+		})();
 		</script>
 	</body>
 </html>
