@@ -222,7 +222,7 @@
 		});
 
 		kinect.openMultiSourceReader({
-			frameTypes: Kinect2.FrameTypes.BodyIndexColor
+			frameTypes: Kinect2.FrameType.bodyIndexColor
 		});
 	}
 	})();

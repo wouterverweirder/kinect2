@@ -20,6 +20,8 @@ typedef struct _JSBody
 	bool tracked;
 	bool hasPixels;
 	UINT64 trackingId;
+	char leftHandState;
+	char rightHandState;
 	JSJoint joints[JointType_Count];
 	RGBQUAD colorPixels[cColorWidth * cColorHeight];
 	char depthPixels[cDepthWidth * cDepthHeight];

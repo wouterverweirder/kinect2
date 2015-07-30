@@ -783,7 +783,9 @@ NAUV_WORK_CB(BodyProgress_) {
 				//create a body object
 				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
 				v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(m_jsBodyFrame.bodies[i].trackingId)));
-
+				//hand states
+				v8body->Set(NanNew<v8::String>("leftHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
+				v8body->Set(NanNew<v8::String>("rightHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
 				v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
 				//joints
 				for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
@@ -848,12 +850,20 @@ void BodyReaderThreadLoop(void *arg)
 					BOOLEAN bTracked = false;
 					hr = pBody->get_IsTracked(&bTracked);
 					m_jsBodyFrame.bodies[i].tracked = bTracked;
+
 					if(bTracked)
 					{
 						numTrackedBodies++;
 						UINT64 iTrackingId = 0;
 						hr = pBody->get_TrackingId(&iTrackingId);
 						m_jsBodyFrame.bodies[i].trackingId = iTrackingId;
+						//hand state
+						HandState leftHandState = HandState_Unknown;
+						HandState rightHandState = HandState_Unknown;
+						pBody->get_HandLeftState(&leftHandState);
+						pBody->get_HandRightState(&rightHandState);
+						m_jsBodyFrame.bodies[i].leftHandState = leftHandState;
+						m_jsBodyFrame.bodies[i].rightHandState = rightHandState;
 						//go through the joints
 						Joint joints[JointType_Count];
 						hr = pBody->GetJoints(_countof(joints), joints);
@@ -997,7 +1007,9 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 					//create a body object
 					v8::Local<v8::Object> v8body = NanNew<v8::Object>();
 					v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(m_jsBodyFrame.bodies[i].trackingId)));
-
+					//hand states
+					v8body->Set(NanNew<v8::String>("leftHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
+					v8body->Set(NanNew<v8::String>("rightHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
 					v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
 					//joints
 					for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
@@ -1378,6 +1390,13 @@ void MultiSourceReaderThreadLoop(void *arg)
 								UINT64 iTrackingId = 0;
 								hr = pBody->get_TrackingId(&iTrackingId);
 								m_jsBodyFrame.bodies[i].trackingId = iTrackingId;
+								//hand state
+								HandState leftHandState = HandState_Unknown;
+								HandState rightHandState = HandState_Unknown;
+								pBody->get_HandLeftState(&leftHandState);
+								pBody->get_HandRightState(&rightHandState);
+								m_jsBodyFrame.bodies[i].leftHandState = leftHandState;
+								m_jsBodyFrame.bodies[i].rightHandState = rightHandState;
 								//go through the joints
 								Joint joints[JointType_Count];
 								hr = pBody->GetJoints(_countof(joints), joints);
