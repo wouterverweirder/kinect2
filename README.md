@@ -1,10 +1,12 @@
 # Node-Kinect2
 
-Nodejs library to access the kinect 2 data from the official MS SDK
+Nodejs library to access the kinect 2 data from the official MS SDK on Windows.
 
 ![Screenshot](https://raw.githubusercontent.com/wouterverweirder/node-kinect2/master/node-kinect2-skeleton.png)
 
 ## Installation
+
+You will need to install [the official Kinect 2 SDK](https://www.microsoft.com/en-us/download/details.aspx?id=44561) before you can use this module.
 
 ### node.js
 
