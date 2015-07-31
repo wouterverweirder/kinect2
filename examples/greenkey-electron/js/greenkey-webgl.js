@@ -208,21 +208,48 @@
 		colorImageMetaData.isProcessing = false;
 	}
 
+	function getClosestBodyIndex(bodies) {
+		var closestZ = Number.MAX_VALUE;
+		var closestBodyIndex = -1;
+		for(var i = 0; i < bodies.length; i++) {
+			if(bodies[i].tracked && bodies[i].joints[Kinect2.JointType.spineMid].cameraZ < closestZ) {
+				closestZ = bodies[i].joints[Kinect2.JointType.spineMid].cameraZ;
+				closestBodyIndex = i;
+			}
+		}
+		return closestBodyIndex;
+	}
+
+	var trackedBodyIndex = -1;
+	var emptyPixels = new Uint8Array(1920 * 1080 * 4);
+
 	if(kinect.open()) {
 		kinect.on('multiSourceFrame', function(frame){
-			for (var player = 0; player < frame.bodyIndexColor.bodies.length; player++) {
-				if(frame.bodyIndexColor.bodies[player].buffer) {
-					//copy Buffer into Uint8Array
-					colorPixels = new Uint8Array(frame.bodyIndexColor.bodies[player].buffer);
-					//transferable object to worker thread
-					processImageData(colorPixels.buffer, colorCanvas.width, colorCanvas.height);
-					break;
+			var closestBodyIndex = getClosestBodyIndex(frame.body.bodies);
+			if(closestBodyIndex !== trackedBodyIndex) {
+				if(closestBodyIndex > -1) {
+					kinect.trackPixelsForBodyIndices([closestBodyIndex]);
+				} else {
+					kinect.trackPixelsForBodyIndices(false);
+					//clear canvas
+					processImageData(emptyPixels.buffer, colorCanvas.width, colorCanvas.height);
 				}
 			}
+			else {
+				if(closestBodyIndex > -1) {
+					if(frame.bodyIndexColor.bodies[closestBodyIndex].buffer) {
+						//copy Buffer into Uint8Array
+						colorPixels = new Uint8Array(frame.bodyIndexColor.bodies[closestBodyIndex].buffer);
+						//transferable object to worker thread
+						processImageData(colorPixels.buffer, colorCanvas.width, colorCanvas.height);
+					}
+				}
+			}
+			trackedBodyIndex = closestBodyIndex;
 		});
 
 		kinect.openMultiSourceReader({
-			frameTypes: Kinect2.FrameType.bodyIndexColor
+			frameTypes: Kinect2.FrameType.bodyIndexColor | Kinect2.FrameType.body
 		});
 	}
 	})();

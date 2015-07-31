@@ -84,6 +84,15 @@ Kinect2.prototype.closeMultiSourceReader = function() {
 	return this.nativeKinect2.closeMultiSourceReader();
 };
 
+/**
+ * Specify which body indices you want to have pixel data from
+ * Used when running the multisource reader to get green screen effects
+ * provide an array with body indices (0 -> 5)
+ */
+Kinect2.prototype.trackPixelsForBodyIndices = function(bodyIndices) {
+	return this.nativeKinect2.trackPixelsForBodyIndices(bodyIndices);
+};
+
 Kinect2.prototype.openDepthReader = function() {
 	return this.nativeKinect2.openDepthReader(this.depthFrameCallback.bind(this));
 };

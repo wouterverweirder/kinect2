@@ -16,32 +16,50 @@
 	});
 	colorWorkerThread.postMessage(colorImageData);
 
+	function getClosestBodyIndex(bodies) {
+		var closestZ = Number.MAX_VALUE;
+		var closestBodyIndex = -1;
+		for(var i = 0; i < bodies.length; i++) {
+			if(bodies[i].tracked && bodies[i].joints[Kinect2.JointType.spineMid].cameraZ < closestZ) {
+				closestZ = bodies[i].joints[Kinect2.JointType.spineMid].cameraZ;
+				closestBodyIndex = i;
+			}
+		}
+		return closestBodyIndex;
+	}
+
+	var trackedBodyIndex = -1;
+
 	if(kinect.open()) {
 		kinect.on('multiSourceFrame', function(frame){
-
-			//show color pixels of first user we find
-			if(!colorProcessing) {
-				//player
-				for (var player = 0; player < frame.bodyIndexColor.bodies.length; player++) {
-					if(frame.bodyIndexColor.bodies[player].buffer) {
-						colorProcessing = true;
-						//copy Buffer into Uint8Array
-						colorPixels = new Uint8Array(frame.bodyIndexColor.bodies[player].buffer);
-						//transferable object to worker thread
-						colorWorkerThread.postMessage(colorPixels.buffer, [colorPixels.buffer]);
-						break;
-					}
-				}
-				if(!colorProcessing)
-				{
-					//still not processing -> no body has been found, clear the canvas
+			if(colorProcessing) {
+				return;
+			}
+			var closestBodyIndex = getClosestBodyIndex(frame.body.bodies);
+			if(closestBodyIndex !== trackedBodyIndex) {
+				if(closestBodyIndex > -1) {
+					kinect.trackPixelsForBodyIndices([closestBodyIndex]);
+				} else {
+					kinect.trackPixelsForBodyIndices(false);
 					colorCtx.clearRect(0, 0, colorCanvas.width, colorCanvas.height);
 				}
 			}
+			else {
+				if(closestBodyIndex > -1) {
+					if(frame.bodyIndexColor.bodies[closestBodyIndex].buffer) {
+						colorProcessing = true;
+						//copy Buffer into Uint8Array
+						colorPixels = new Uint8Array(frame.bodyIndexColor.bodies[closestBodyIndex].buffer);
+						//transferable object to worker thread
+						colorWorkerThread.postMessage(colorPixels.buffer, [colorPixels.buffer]);
+					}
+				}
+			}
+			trackedBodyIndex = closestBodyIndex;
 		});
 
 		kinect.openMultiSourceReader({
-			frameTypes: Kinect2.FrameType.bodyIndexColor
+			frameTypes: Kinect2.FrameType.bodyIndexColor | Kinect2.FrameType.body
 		});
 	}
 	})();

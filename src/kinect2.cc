@@ -21,7 +21,6 @@ char*										m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
 char*										m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
 char*										m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
 JSBodyFrame							m_jsBodyFrame;
-int 										numTrackedBodies = 0;
 
 DepthSpacePoint*				m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
 
@@ -768,44 +767,49 @@ NAN_METHOD(CloseDepthReaderFunction)
 	NanReturnValue(NanTrue());
 }
 
+v8::Local<v8::Array> getV8Bodies_()
+{
+	v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(BODY_COUNT);
+	for(int i = 0; i < BODY_COUNT; i++)
+	{
+		//create a body object
+		v8::Local<v8::Object> v8body = NanNew<v8::Object>();
+		v8body->Set(NanNew<v8::String>("bodyIndex"), NanNew<v8::Number>(i));
+		v8body->Set(NanNew<v8::String>("tracked"), NanNew<v8::Boolean>(m_jsBodyFrame.bodies[i].tracked));
+		if(m_jsBodyFrame.bodies[i].tracked)
+		{
+			v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(m_jsBodyFrame.bodies[i].trackingId)));
+			//hand states
+			v8body->Set(NanNew<v8::String>("leftHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
+			v8body->Set(NanNew<v8::String>("rightHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
+			v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
+			//joints
+			for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
+			{
+				v8::Local<v8::Object> v8joint = NanNew<v8::Object>();
+				v8joint->Set(NanNew<v8::String>("depthX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthX));
+				v8joint->Set(NanNew<v8::String>("depthY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthY));
+				v8joint->Set(NanNew<v8::String>("colorX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorX));
+				v8joint->Set(NanNew<v8::String>("colorY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorY));
+				v8joint->Set(NanNew<v8::String>("cameraX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraX));
+				v8joint->Set(NanNew<v8::String>("cameraY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraY));
+				v8joint->Set(NanNew<v8::String>("cameraZ"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraZ));
+				v8joints->Set(NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].jointType), v8joint);
+			}
+			v8body->Set(NanNew<v8::String>("joints"), v8joints);
+		}
+		v8bodies->Set(i, v8body);
+	}
+	return v8bodies;
+}
+
 NAUV_WORK_CB(BodyProgress_) {
 	uv_mutex_lock(&m_mBodyReaderMutex);
 	NanScope();
 	if(m_pBodyReaderCallback != NULL)
 	{
 		//save the bodies as a V8 object structure
-		v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(numTrackedBodies);
-		int bodyIndex = 0;
-		for(int i = 0; i < BODY_COUNT; i++)
-		{
-			if(m_jsBodyFrame.bodies[i].tracked)
-			{
-				//create a body object
-				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
-				v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(m_jsBodyFrame.bodies[i].trackingId)));
-				//hand states
-				v8body->Set(NanNew<v8::String>("leftHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
-				v8body->Set(NanNew<v8::String>("rightHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
-				v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
-				//joints
-				for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
-				{
-					v8::Local<v8::Object> v8joint = NanNew<v8::Object>();
-					v8joint->Set(NanNew<v8::String>("depthX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthX));
-					v8joint->Set(NanNew<v8::String>("depthY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthY));
-					v8joint->Set(NanNew<v8::String>("colorX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorX));
-					v8joint->Set(NanNew<v8::String>("colorY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorY));
-					v8joint->Set(NanNew<v8::String>("cameraX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraX));
-					v8joint->Set(NanNew<v8::String>("cameraY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraY));
-					v8joint->Set(NanNew<v8::String>("cameraZ"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraZ));
-					v8joints->Set(NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].jointType), v8joint);
-				}
-				v8body->Set(NanNew<v8::String>("joints"), v8joints);
-
-				v8bodies->Set(bodyIndex, v8body);
-				bodyIndex++;
-			}
-		}
+		v8::Local<v8::Array> v8bodies = getV8Bodies_();
 
 		v8::Local<v8::Value> argv[] = {
 			v8bodies
@@ -829,7 +833,6 @@ void BodyReaderThreadLoop(void *arg)
 
 		IBodyFrame* pBodyFrame = NULL;
 		IBody* ppBodies[BODY_COUNT] = {0};
-		numTrackedBodies = 0;
 		HRESULT hr;
 
 		hr = m_pBodyFrameReader->AcquireLatestFrame(&pBodyFrame);
@@ -853,7 +856,6 @@ void BodyReaderThreadLoop(void *arg)
 
 					if(bTracked)
 					{
-						numTrackedBodies++;
 						UINT64 iTrackingId = 0;
 						hr = pBody->get_TrackingId(&iTrackingId);
 						m_jsBodyFrame.bodies[i].trackingId = iTrackingId;
@@ -962,6 +964,8 @@ NAN_METHOD(CloseBodyReaderFunction)
 	NanReturnValue(NanTrue());
 }
 
+
+
 NAUV_WORK_CB(MultiSourceProgress_) {
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
 	NanScope();
@@ -998,38 +1002,7 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 		{
 			v8::Local<v8::Object> v8BodyResult = NanNew<v8::Object>();
 
-			v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(numTrackedBodies);
-			int bodyIndex = 0;
-			for(int i = 0; i < BODY_COUNT; i++)
-			{
-				if(m_jsBodyFrame.bodies[i].tracked)
-				{
-					//create a body object
-					v8::Local<v8::Object> v8body = NanNew<v8::Object>();
-					v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(m_jsBodyFrame.bodies[i].trackingId)));
-					//hand states
-					v8body->Set(NanNew<v8::String>("leftHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
-					v8body->Set(NanNew<v8::String>("rightHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
-					v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
-					//joints
-					for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
-					{
-						v8::Local<v8::Object> v8joint = NanNew<v8::Object>();
-						v8joint->Set(NanNew<v8::String>("depthX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthX));
-						v8joint->Set(NanNew<v8::String>("depthY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthY));
-						v8joint->Set(NanNew<v8::String>("colorX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorX));
-						v8joint->Set(NanNew<v8::String>("colorY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorY));
-						v8joint->Set(NanNew<v8::String>("cameraX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraX));
-						v8joint->Set(NanNew<v8::String>("cameraY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraY));
-						v8joint->Set(NanNew<v8::String>("cameraZ"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraZ));
-						v8joints->Set(NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].jointType), v8joint);
-					}
-					v8body->Set(NanNew<v8::String>("joints"), v8joints);
-
-					v8bodies->Set(bodyIndex, v8body);
-					bodyIndex++;
-				}
-			}
+			v8::Local<v8::Array> v8bodies = getV8Bodies_();
 			v8BodyResult->Set(NanNew<v8::String>("bodies"), v8bodies);
 
 			v8Result->Set(NanNew<v8::String>("body"), v8BodyResult);
@@ -1043,13 +1016,12 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 			v8::Local<v8::Object> v8BodyIndexColorPixels = NanNew(m_persistentBodyIndexColorPixels);
 
 			v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(BODY_COUNT);
-			int numBodiesWithPixels = 0;
 			for(int i = 0; i < BODY_COUNT; i++)
 			{
 				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
+				v8body->Set(NanNew<v8::String>("bodyIndex"), NanNew<v8::Number>(i));
 				//something weird is going on: every x frames hasPixels is false, but body is still tracked?
-				if(m_jsBodyFrame.bodies[i].hasPixels || m_jsBodyFrame.bodies[i].tracked) {
-					numBodiesWithPixels++;
+				if(m_jsBodyFrame.bodies[i].trackPixels && (m_jsBodyFrame.bodies[i].hasPixels || m_jsBodyFrame.bodies[i].tracked)) {
 					//reuse the existing buffer
 					v8::Local<v8::Value> v8ColorPixels = v8BodyIndexColorPixels->Get(i);
 					char* data = node::Buffer::Data(v8ColorPixels);
@@ -1133,7 +1105,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 			IBodyFrameReference* pBodyFrameReference = NULL;
 			IBodyFrame* pBodyFrame = NULL;
 			IBody* ppBodies[BODY_COUNT] = {0};
-			numTrackedBodies = 0;
 
 			if(FrameSourceTypes::FrameSourceTypes_Color & m_enabledFrameSourceTypes)
 			{
@@ -1386,7 +1357,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 							m_jsBodyFrame.bodies[i].tracked = bTracked;
 							if(bTracked)
 							{
-								numTrackedBodies++;
 								UINT64 iTrackingId = 0;
 								hr = pBody->get_TrackingId(&iTrackingId);
 								m_jsBodyFrame.bodies[i].trackingId = iTrackingId;
@@ -1573,6 +1543,34 @@ NAN_METHOD(CloseMultiSourceReaderFunction)
 	NanReturnValue(NanTrue());
 }
 
+NAN_METHOD(TrackPixelsForBodyIndicesFunction)
+{
+	NanScope();
+
+	uv_mutex_lock(&m_mMultiSourceReaderMutex);
+	int i;
+	for(i = 0; i < BODY_COUNT; i++)
+	{
+		m_jsBodyFrame.bodies[i].trackPixels = false;
+	}
+	Local<Object> jsOptions = args[0].As<Object>();
+	if(jsOptions->IsArray())
+	{
+		Local<Array> jsBodyIndices = args[0].As<Array>();
+		int len = jsBodyIndices->Length();
+		for(i = 0; i < len; i++)
+		{
+			uint32_t index = static_cast<uint32_t>(jsBodyIndices->Get(i).As<Number>()->Value());
+			index = min(index, BODY_COUNT - 1);
+			m_jsBodyFrame.bodies[index].trackPixels = true;
+		}
+	}
+
+	uv_mutex_unlock(&m_mMultiSourceReaderMutex);
+
+	NanReturnValue(NanTrue());
+}
+
 void Init(Handle<Object> exports)
 {
 	NanScope();
@@ -1611,8 +1609,6 @@ void Init(Handle<Object> exports)
 	}
 	NanAssignPersistent(m_persistentBodyIndexColorPixels, v8BodyIndexColorPixels);
 
-	//disposing should happen with NanDisposePersistent(handle);
-
 	exports->Set(NanNew<String>("open"),
 		NanNew<FunctionTemplate>(OpenFunction)->GetFunction());
 	exports->Set(NanNew<String>("close"),
@@ -1641,6 +1637,8 @@ void Init(Handle<Object> exports)
 		NanNew<FunctionTemplate>(OpenMultiSourceReaderFunction)->GetFunction());
 	exports->Set(NanNew<String>("closeMultiSourceReader"),
 		NanNew<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
+	exports->Set(NanNew<String>("trackPixelsForBodyIndices"),
+		NanNew<FunctionTemplate>(TrackPixelsForBodyIndicesFunction)->GetFunction());
 }
 
 NODE_MODULE(kinect2, Init)
