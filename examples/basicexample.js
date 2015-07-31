@@ -1,4 +1,4 @@
-var Kinect2 = require('../kinect2');
+var Kinect2 = require('../lib/kinect2');
 
 var kinect = new Kinect2();
 

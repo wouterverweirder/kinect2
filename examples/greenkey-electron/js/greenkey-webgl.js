@@ -1,6 +1,6 @@
 // ImageMetadata WEBGL implementation from Kinect2 SDK JS Examples. Copyright (c) Microsoft Corporation.  All rights reserved.
 (function(){
-	var Kinect2 = require('../../../kinect2');
+	var Kinect2 = require('../../lib/kinect2');
 	var kinect = new Kinect2();
 
 	var colorCanvas = document.getElementById('colorCanvas');

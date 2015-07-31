@@ -10,6 +10,6 @@
   "license": "MIT",
   "dependencies": {},
   "devDependencies": {
-    "electron-prebuilt": "^0.30.0"
+    "electron-prebuilt": "^0.30.2"
   }
 }

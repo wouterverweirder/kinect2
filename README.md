@@ -36,7 +36,7 @@ If you want to use this module inside an electron application, you will need to 
 
 ``` bash
 $ cd node_modules/kinect2
-$ node-gyp rebuild --target=0.30.0 --arch=x64 --dist-url=https://atom.io/download/atom-shell
+$ node-gyp rebuild --target=0.30.2 --arch=x64 --dist-url=https://atom.io/download/atom-shell
 ```
 
 ## Usage
