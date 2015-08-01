@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Hello World!</title>
+		<style>
+		html, body {
+			min-height: 100%;
+		}
+		body {
+			background: linear-gradient(to bottom, #f2f9fe 0%,#d6f0fd 100%);
+		}
+		#fps {
+			position: absolute;
+			top: 0;
+			left: 0;
+			background: white;
+		}
+		</style>
+	</head>
+	<body>
+		<h1 id="fps">0 fps</h1>
+		<canvas id="colorCanvas" width="1920" height="1080"></canvas>
+		<script>
+		//browser fps calc http://jsfiddle.net/krnlde/u1fL1cs5/
+		var fpsEl = document.getElementById('fps');
+		window.countFPS = (function () {
+		  var lastLoop = (new Date()).getMilliseconds();
+		  var count = 1;
+		  var fps = 0;
+
+		  return function () {
+		    var currentLoop = (new Date()).getMilliseconds();
+		    if (lastLoop > currentLoop) {
+		      fps = count;
+		      count = 1;
+		    } else {
+		      count += 1;
+		    }
+		    lastLoop = currentLoop;
+		    return fps;
+		  };
+		}());
+		(function loop() {
+			requestAnimationFrame(function () {
+				fpsEl.innerHTML = countFPS() + ' fps';
+				loop();
+			});
+		}());
+		</script>
+		<script src="js/app.js"></script>
+	</body>
+</html>

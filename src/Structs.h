@@ -32,8 +32,12 @@ typedef struct _JSBody
 
 typedef struct _JSBodyFrame
 {
-	INT64 timestamp;
 	JSBody bodies[BODY_COUNT];
+	bool hasFloorClipPlane;
+	float floorClipPlaneX;
+	float floorClipPlaneY;
+	float floorClipPlaneZ;
+	float floorClipPlaneW;
 } JSBodyFrame;
 
 #endif

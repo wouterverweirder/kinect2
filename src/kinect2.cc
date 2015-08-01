@@ -767,8 +767,11 @@ NAN_METHOD(CloseDepthReaderFunction)
 	NanReturnValue(NanTrue());
 }
 
-v8::Local<v8::Array> getV8Bodies_()
+v8::Local<v8::Object> getV8BodyFrame_()
 {
+	v8::Local<v8::Object> v8BodyResult = NanNew<v8::Object>();
+
+	//bodies
 	v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(BODY_COUNT);
 	for(int i = 0; i < BODY_COUNT; i++)
 	{
@@ -800,7 +803,19 @@ v8::Local<v8::Array> getV8Bodies_()
 		}
 		v8bodies->Set(i, v8body);
 	}
-	return v8bodies;
+	v8BodyResult->Set(NanNew<v8::String>("bodies"), v8bodies);
+
+	//floor plane
+	if(m_jsBodyFrame.hasFloorClipPlane) {
+		v8::Local<v8::Object> v8FloorClipPlane = NanNew<v8::Object>();
+		v8FloorClipPlane->Set(NanNew<v8::String>("x"), NanNew<v8::Number>(m_jsBodyFrame.floorClipPlaneX));
+		v8FloorClipPlane->Set(NanNew<v8::String>("y"), NanNew<v8::Number>(m_jsBodyFrame.floorClipPlaneY));
+		v8FloorClipPlane->Set(NanNew<v8::String>("z"), NanNew<v8::Number>(m_jsBodyFrame.floorClipPlaneZ));
+		v8FloorClipPlane->Set(NanNew<v8::String>("w"), NanNew<v8::Number>(m_jsBodyFrame.floorClipPlaneW));
+		v8BodyResult->Set(NanNew<v8::String>("floorClipPlane"), v8FloorClipPlane);
+	}
+
+	return v8BodyResult;
 }
 
 NAUV_WORK_CB(BodyProgress_) {
@@ -808,11 +823,10 @@ NAUV_WORK_CB(BodyProgress_) {
 	NanScope();
 	if(m_pBodyReaderCallback != NULL)
 	{
-		//save the bodies as a V8 object structure
-		v8::Local<v8::Array> v8bodies = getV8Bodies_();
+		v8::Local<v8::Object> v8BodyResult = getV8BodyFrame_();
 
 		v8::Local<v8::Value> argv[] = {
-			v8bodies
+			v8BodyResult
 		};
 		m_pBodyReaderCallback->Call(1, argv);
 	}
@@ -833,7 +847,7 @@ void BodyReaderThreadLoop(void *arg)
 
 		IBodyFrame* pBodyFrame = NULL;
 		IBody* ppBodies[BODY_COUNT] = {0};
-		HRESULT hr;
+		HRESULT hr, hr2;
 
 		hr = m_pBodyFrameReader->AcquireLatestFrame(&pBodyFrame);
 		if(SUCCEEDED(hr))
@@ -845,6 +859,18 @@ void BodyReaderThreadLoop(void *arg)
 		{
 			DepthSpacePoint depthPoint = {0};
 			ColorSpacePoint colorPoint = {0};
+			Vector4 floorClipPlane = {0};
+			//floor clip plane
+			m_jsBodyFrame.hasFloorClipPlane = false;
+			hr2 = pBodyFrame->get_FloorClipPlane(&floorClipPlane);
+			if(SUCCEEDED(hr2))
+			{
+				m_jsBodyFrame.hasFloorClipPlane = true;
+				m_jsBodyFrame.floorClipPlaneX = floorClipPlane.x;
+				m_jsBodyFrame.floorClipPlaneY = floorClipPlane.y;
+				m_jsBodyFrame.floorClipPlaneZ = floorClipPlane.z;
+				m_jsBodyFrame.floorClipPlaneW = floorClipPlane.w;
+			}
 			for (int i = 0; i < _countof(ppBodies); ++i)
 			{
 				IBody* pBody = ppBodies[i];
@@ -1000,10 +1026,7 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 
 		if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
 		{
-			v8::Local<v8::Object> v8BodyResult = NanNew<v8::Object>();
-
-			v8::Local<v8::Array> v8bodies = getV8Bodies_();
-			v8BodyResult->Set(NanNew<v8::String>("bodies"), v8bodies);
+			v8::Local<v8::Object> v8BodyResult = getV8BodyFrame_();
 
 			v8Result->Set(NanNew<v8::String>("body"), v8BodyResult);
 		}
@@ -1057,7 +1080,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 			break;
 		}
 
-		HRESULT hr;
+		HRESULT hr, hr2;
 		IMultiSourceFrame* pMultiSourceFrame = NULL;
 
 		hr = m_pMultiSourceFrameReader->AcquireLatestFrame(&pMultiSourceFrame);
@@ -1254,16 +1277,13 @@ void MultiSourceReaderThreadLoop(void *arg)
 			*/
 
 			//we do something with color data
-			if(FrameSourceTypes::FrameSourceTypes_Color & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Color & m_enabledFrameSourceTypes)
 			{
 				//what are we doing with the color data?
 				//we could have color and / or bodyindexcolor
 				if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
 				{
-					if (SUCCEEDED(hr))
-					{
-						hr = m_pCoordinateMapper->MapColorFrameToDepthSpace(nDepthWidth * nDepthHeight, (UINT16*)pDepthBuffer, nColorWidth * nColorHeight, m_pDepthCoordinatesForColor);
-					}
+					hr = m_pCoordinateMapper->MapColorFrameToDepthSpace(nDepthWidth * nDepthHeight, (UINT16*)pDepthBuffer, nColorWidth * nColorHeight, m_pDepthCoordinatesForColor);
 					if (SUCCEEDED(hr))
 					{
 						//default transparent colors
@@ -1298,41 +1318,35 @@ void MultiSourceReaderThreadLoop(void *arg)
 						}
 					}
 				}
-				if(NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes)
+				if(SUCCEEDED(hr) && NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes)
 				{
 					//copy the color data to the result buffer
-					if (SUCCEEDED(hr))
-					{
-						memcpy(m_pColorPixels, pColorBuffer, cColorWidth * cColorHeight * sizeof(RGBQUAD));
-					}
+					memcpy(m_pColorPixels, pColorBuffer, cColorWidth * cColorHeight * sizeof(RGBQUAD));
 				}
 			}
 
-			if(FrameSourceTypes::FrameSourceTypes_Depth & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Depth & m_enabledFrameSourceTypes)
 			{
 				//depth image
 				if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
 				{
-					if (SUCCEEDED(hr))
+					mapDepthToByte = nDepthMaxDistance / 256;
+					if (m_pDepthPixels && pDepthBuffer && (nDepthWidth == cDepthWidth) && (nDepthHeight == cDepthHeight))
 					{
-						mapDepthToByte = nDepthMaxDistance / 256;
-						if (m_pDepthPixels && pDepthBuffer && (nDepthWidth == cDepthWidth) && (nDepthHeight == cDepthHeight))
+						char* pDepthPixel = m_pDepthPixels;
+
+						// end pixel is start + width*height - 1
+						const UINT16* pDepthBufferEnd = pDepthBuffer + (nDepthWidth * nDepthHeight);
+
+						while (pDepthBuffer < pDepthBufferEnd)
 						{
-							char* pDepthPixel = m_pDepthPixels;
+							USHORT depth = *pDepthBuffer;
 
-							// end pixel is start + width*height - 1
-							const UINT16* pDepthBufferEnd = pDepthBuffer + (nDepthWidth * nDepthHeight);
+							BYTE intensity = static_cast<BYTE>(depth >= nDepthMinReliableDistance && depth <= nDepthMaxDistance ? (depth / mapDepthToByte) : 0);
+							*pDepthPixel = intensity;
 
-							while (pDepthBuffer < pDepthBufferEnd)
-							{
-								USHORT depth = *pDepthBuffer;
-
-								BYTE intensity = static_cast<BYTE>(depth >= nDepthMinReliableDistance && depth <= nDepthMaxDistance ? (depth / mapDepthToByte) : 0);
-								*pDepthPixel = intensity;
-
-								++pDepthPixel;
-								++pDepthBuffer;
-							}
+							++pDepthPixel;
+							++pDepthBuffer;
 						}
 					}
 				}
@@ -1340,13 +1354,25 @@ void MultiSourceReaderThreadLoop(void *arg)
 
 			//todo: add raw depth & body index depth to above
 
-			if(FrameSourceTypes::FrameSourceTypes_Body & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Body & m_enabledFrameSourceTypes)
 			{
 				//body frame
 				if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
 				{
 					DepthSpacePoint depthPoint = {0};
 					ColorSpacePoint colorPoint = {0};
+					Vector4 floorClipPlane = {0};
+					//floor clip plane
+					hr2 = pBodyFrame->get_FloorClipPlane(&floorClipPlane);
+					m_jsBodyFrame.hasFloorClipPlane = false;
+					if(SUCCEEDED(hr2))
+					{
+						m_jsBodyFrame.hasFloorClipPlane = true;
+						m_jsBodyFrame.floorClipPlaneX = floorClipPlane.x;
+						m_jsBodyFrame.floorClipPlaneY = floorClipPlane.y;
+						m_jsBodyFrame.floorClipPlaneZ = floorClipPlane.z;
+						m_jsBodyFrame.floorClipPlaneW = floorClipPlane.w;
+					}
 					for (int i = 0; i < _countof(ppBodies); ++i)
 					{
 						IBody* pBody = ppBodies[i];
