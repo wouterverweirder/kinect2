@@ -49,10 +49,10 @@ var kinect = new Kinect2();
 if(kinect.open()) {
 	console.log("Kinect Opened");
 	//listen for body frames
-	kinect.on('bodyFrame', function(bodies){
-		for(var i = 0;  i < bodies.length; i++) {
-			if(bodies[i].tracked) {
-				console.log(bodies[i]);
+	kinect.on('bodyFrame', function(bodyFrame){
+		for(var i = 0;  i < bodyFrame.bodies.length; i++) {
+			if(bodyFrame.bodies[i].tracked) {
+				console.log(bodyFrame.bodies[i]);
 			}
 		}
 	});

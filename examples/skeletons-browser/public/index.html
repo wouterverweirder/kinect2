@@ -54,10 +54,10 @@
 			ctx.globalAlpha = 1;
 		}
 
-		socket.on('bodyFrame', function(bodies){
+		socket.on('bodyFrame', function(bodyFrame){
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 			var index = 0;
-			bodies.forEach(function(body){
+			bodyFrame.bodies.forEach(function(body){
 				if(body.tracked) {
 					for(var jointType in body.joints) {
 						var joint = body.joints[jointType];

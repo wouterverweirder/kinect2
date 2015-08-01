@@ -15,8 +15,8 @@ if(kinect.open()) {
 		res.sendFile(__dirname + '/public/index.html');
 	});
 
-	kinect.on('bodyFrame', function(bodies){
-		io.sockets.emit('bodyFrame', bodies);
+	kinect.on('bodyFrame', function(bodyFrame){
+		io.sockets.emit('bodyFrame', bodyFrame);
 	});
 
 	kinect.openBodyReader();

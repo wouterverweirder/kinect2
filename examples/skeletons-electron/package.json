@@ -1,6 +1,6 @@
 {
 	"name": "skeletons-electron",
-	"version": "0.0.18",
+	"version": "0.0.19",
 	"description": "display skeleton tracking in electron app",
 	"main": "index.js",
 	"scripts": {
