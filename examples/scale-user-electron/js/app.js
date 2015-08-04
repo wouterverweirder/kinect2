@@ -39,6 +39,15 @@
 		return closestBodyIndex;
 	}
 
+	function calculateLength(joints) {
+		var length = 0;
+		var numJoints = joints.length;
+		for(var i = 1; i < numJoints; i++) {
+			length += Math.sqrt(Math.pow(joints[i].colorX - joints[i-1].colorX, 2) + Math.pow(joints[i].colorY - joints[i-1].colorY, 2));
+		}
+		return length;
+	}
+
 	if(kinect.open()) {
 		kinect.on('multiSourceFrame', function(frame){
 			var closestBodyIndex = getClosestBodyIndex(frame.body.bodies);
@@ -72,6 +81,19 @@
 								topJoint = joint;
 							}
 						}
+						var length = calculateLength([
+							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.head],
+							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.neck],
+							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineShoulder],
+							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineMid],
+							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineBase]
+						]);
+						var scale = 0.3 / length; //scale to fixed size - independent of distance of sensor
+						//head joint is in middle of head, add area (y-distance from neck to head joint) above
+						topJoint = {
+							colorX: topJoint.colorX,
+							colorY: Math.min(topJoint.colorY, frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.head].colorY - (frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.neck].colorY - frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.head].colorY))
+						};
 						var srcRect = {
 							x: leftJoint.colorX * hiddenCanvas.width,
 							y: topJoint.colorY * hiddenCanvas.height,
@@ -79,12 +101,17 @@
 							height: (frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineMid].floorColorY - topJoint.colorY) * hiddenCanvas.height
 						};
 						var dstRect = {
-							x: Math.round((colorCanvas.width - srcRect.width) * 0.5),
-							y: colorCanvas.height - srcRect.height,
-							width: srcRect.width,
-							height: srcRect.height
+							x: colorCanvas.width * 0.5,
+							y: colorCanvas.height - (srcRect.height * scale),
+							width: srcRect.width * scale,
+							height: srcRect.height * scale
 						};
-						processImageData(frame.color.buffer, hiddenCanvas.width, hiddenCanvas.height);
+						//center the user horizontally - is not minus half width of image as user might reach to one side or the other
+						//do minus the space on the left size of the spine
+						var spaceLeft = frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineMid].colorX - leftJoint.colorX;
+						dstRect.x -= (spaceLeft * hiddenCanvas.width * scale);
+						//processImageData(frame.color.buffer, hiddenCanvas.width, hiddenCanvas.height);
+						processImageData(frame.bodyIndexColor.bodies[closestBodyIndex].buffer, hiddenCanvas.width, hiddenCanvas.height);
 						colorCtx.clearRect(0, 0, colorCanvas.width, colorCanvas.height);
 						colorCtx.drawImage(hiddenCanvas, srcRect.x, srcRect.y, srcRect.width, srcRect.height, dstRect.x, dstRect.y, dstRect.width, dstRect.height);
 					}
@@ -96,7 +123,7 @@
 
 		//include the projected floor positions - we want to keep the floor on the bottom, not crop out the user in the middle of a jump
 		kinect.openMultiSourceReader({
-			frameTypes: Kinect2.FrameType.body | Kinect2.FrameType.color,
+			frameTypes: Kinect2.FrameType.body | Kinect2.FrameType.bodyIndexColor,
 			includeJointFloorData: true
 		});
 	}

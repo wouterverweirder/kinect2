@@ -1,6 +1,6 @@
 {
   "name": "depth-feed-browser",
-  "version": "0.0.12",
+  "version": "0.0.20",
   "description": "display depth feed in browser",
   "main": "index.js",
   "scripts": {

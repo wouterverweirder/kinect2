@@ -30,12 +30,12 @@ DWORD										m_enabledFrameSourceTypes = 0;
 //this is the kinect SDK list + additional ones (body index in color space, etc...)
 unsigned long						m_enabledFrameTypes = 0;
 
-NanCallback*						m_pColorReaderCallback;
-NanCallback*						m_pInfraredReaderCallback;
-NanCallback*						m_pLongExposureInfraredReaderCallback;
-NanCallback*						m_pDepthReaderCallback;
-NanCallback*						m_pBodyReaderCallback;
-NanCallback*						m_pMultiSourceReaderCallback;
+Nan::Callback*						m_pColorReaderCallback;
+Nan::Callback*						m_pInfraredReaderCallback;
+Nan::Callback*						m_pLongExposureInfraredReaderCallback;
+Nan::Callback*						m_pDepthReaderCallback;
+Nan::Callback*						m_pBodyReaderCallback;
+Nan::Callback*						m_pMultiSourceReaderCallback;
 
 uv_mutex_t							m_mColorReaderMutex;
 uv_mutex_t							m_mInfraredReaderMutex;
@@ -47,22 +47,22 @@ uv_mutex_t							m_mMultiSourceReaderMutex;
 uv_async_t							m_aColorAsync;
 uv_thread_t							m_tColorThread;
 bool 										m_bColorThreadRunning = false;
-Persistent<Object>			m_persistentColorPixels;
+Nan::Persistent<Object>	m_persistentColorPixels;
 
 uv_async_t							m_aInfraredAsync;
 uv_thread_t							m_tInfraredThread;
 bool 										m_bInfraredThreadRunning = false;
-Persistent<Object>			m_persistentInfraredPixels;
+Nan::Persistent<Object>	m_persistentInfraredPixels;
 
 uv_async_t							m_aLongExposureInfraredAsync;
 uv_thread_t							m_tLongExposureInfraredThread;
 bool 										m_bLongExposureInfraredThreadRunning = false;
-Persistent<Object>			m_persistentLongExposureInfraredPixels;
+Nan::Persistent<Object>	m_persistentLongExposureInfraredPixels;
 
 uv_async_t							m_aDepthAsync;
 uv_thread_t							m_tDepthThread;
 bool 										m_bDepthThreadRunning = false;
-Persistent<Object>			m_persistentDepthPixels;
+Nan::Persistent<Object> m_persistentDepthPixels;
 
 uv_async_t							m_aBodyAsync;
 uv_thread_t							m_tBodyThread;
@@ -71,19 +71,17 @@ bool 										m_bBodyThreadRunning = false;
 uv_async_t							m_aMultiSourceAsync;
 uv_thread_t							m_tMultiSourceThread;
 bool 										m_bMultiSourceThreadRunning = false;
-Persistent<Object>			m_persistentBodyIndexColorPixels;
+Nan::Persistent<Object>	m_persistentBodyIndexColorPixels;
 
 bool 										m_includeJointFloorData = false;
 
 NAN_METHOD(OpenFunction)
 {
-	NanScope();
-
 	HRESULT hr;
 	hr = GetDefaultKinectSensor(&m_pKinectSensor);
 	if (FAILED(hr))
 	{
-		NanReturnValue(NanFalse());
+		info.GetReturnValue().Set(false);
 	}
 
 	if (m_pKinectSensor)
@@ -101,15 +99,13 @@ NAN_METHOD(OpenFunction)
 
 	if (!m_pKinectSensor || FAILED(hr))
 	{
-		NanReturnValue(NanFalse());
+		info.GetReturnValue().Set(false);
 	}
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
 NAN_METHOD(CloseFunction)
 {
-	NanScope();
-
 	//mutex locking
 	uv_mutex_lock(&m_mColorReaderMutex);
 	uv_mutex_lock(&m_mInfraredReaderMutex);
@@ -145,16 +141,16 @@ NAN_METHOD(CloseFunction)
 	uv_mutex_unlock(&m_mBodyReaderMutex);
 	uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
 NAUV_WORK_CB(ColorProgress_) {
+	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mColorReaderMutex);
-	NanScope();
 	if(m_pColorReaderCallback != NULL)
 	{
 		//reuse the existing buffer
-		v8::Local<v8::Object> v8ColorPixels = NanNew(m_persistentColorPixels);
+		v8::Local<v8::Object> v8ColorPixels = Nan::New(m_persistentColorPixels);
 		char* data = node::Buffer::Data(v8ColorPixels);
 		memcpy(data, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
 
@@ -245,8 +241,6 @@ void ColorReaderThreadLoop(void *arg)
 
 NAN_METHOD(OpenColorReaderFunction)
 {
-	NanScope();
-
 	uv_mutex_lock(&m_mColorReaderMutex);
 	if(m_pColorReaderCallback)
 	{
@@ -254,7 +248,7 @@ NAN_METHOD(OpenColorReaderFunction)
 		m_pColorReaderCallback = NULL;
 	}
 
-	m_pColorReaderCallback = new NanCallback(args[0].As<Function>());
+	m_pColorReaderCallback = new Nan::Callback(info[0].As<Function>());
 
 	HRESULT hr;
 	IColorFrameSource* pColorFrameSource = NULL;
@@ -275,33 +269,32 @@ NAN_METHOD(OpenColorReaderFunction)
 	uv_mutex_unlock(&m_mColorReaderMutex);
 	if (SUCCEEDED(hr))
 	{
-		NanReturnValue(NanTrue());
+		info.GetReturnValue().Set(true);
 	}
 	else
 	{
-		NanReturnValue(NanFalse());
+		info.GetReturnValue().Set(false);
 	}
 }
 
 NAN_METHOD(CloseColorReaderFunction)
 {
-	NanScope();
-
 	uv_mutex_lock(&m_mColorReaderMutex);
 	m_bColorThreadRunning = false;
 	SafeRelease(m_pColorFrameReader);
 	uv_mutex_unlock(&m_mColorReaderMutex);
 
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
-NAUV_WORK_CB(InfraredProgress_) {
+NAUV_WORK_CB(InfraredProgress_)
+{
+	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mInfraredReaderMutex);
-	NanScope();
 	if(m_pInfraredReaderCallback != NULL)
 	{
 		//reuse the existing buffer
-		v8::Local<v8::Object> v8InfraredPixels = NanNew(m_persistentInfraredPixels);
+		v8::Local<v8::Object> v8InfraredPixels = Nan::New(m_persistentInfraredPixels);
 		char* data = node::Buffer::Data(v8InfraredPixels);
 		memcpy(data, m_pInfraredPixels, cInfraredWidth * cInfraredHeight);
 
@@ -405,7 +398,6 @@ void InfraredReaderThreadLoop(void *arg)
 
 NAN_METHOD(OpenInfraredReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mInfraredReaderMutex);
 	if(m_pInfraredReaderCallback)
@@ -414,7 +406,7 @@ NAN_METHOD(OpenInfraredReaderFunction)
 		m_pInfraredReaderCallback = NULL;
 	}
 
-	m_pInfraredReaderCallback = new NanCallback(args[0].As<Function>());
+	m_pInfraredReaderCallback = new Nan::Callback(info[0].As<Function>());
 
 	HRESULT hr;
 	IInfraredFrameSource* pInfraredFrameSource = NULL;
@@ -435,33 +427,32 @@ NAN_METHOD(OpenInfraredReaderFunction)
 	uv_mutex_unlock(&m_mInfraredReaderMutex);
 	if (SUCCEEDED(hr))
 	{
-		NanReturnValue(NanTrue());
+		info.GetReturnValue().Set(true);
 	}
 	else
 	{
-		NanReturnValue(NanFalse());
+		info.GetReturnValue().Set(false);
 	}
 }
 
 NAN_METHOD(CloseInfraredReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mInfraredReaderMutex);
 	m_bInfraredThreadRunning = false;
 	SafeRelease(m_pInfraredFrameReader);
 	uv_mutex_unlock(&m_mInfraredReaderMutex);
 
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
 NAUV_WORK_CB(LongExposureInfraredProgress_) {
+	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mLongExposureInfraredReaderMutex);
-	NanScope();
 	if(m_pLongExposureInfraredReaderCallback != NULL)
 	{
 		//reuse the existing buffer
-		v8::Local<v8::Object> v8LongExposureInfraredPixels = NanNew(m_persistentLongExposureInfraredPixels);
+		v8::Local<v8::Object> v8LongExposureInfraredPixels = Nan::New(m_persistentLongExposureInfraredPixels);
 		char* data = node::Buffer::Data(v8LongExposureInfraredPixels);
 		memcpy(data, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight);
 
@@ -565,7 +556,6 @@ void LongExposureInfraredReaderThreadLoop(void *arg)
 
 NAN_METHOD(OpenLongExposureInfraredReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mLongExposureInfraredReaderMutex);
 	if(m_pLongExposureInfraredReaderCallback)
@@ -574,7 +564,7 @@ NAN_METHOD(OpenLongExposureInfraredReaderFunction)
 		m_pLongExposureInfraredReaderCallback = NULL;
 	}
 
-	m_pLongExposureInfraredReaderCallback = new NanCallback(args[0].As<Function>());
+	m_pLongExposureInfraredReaderCallback = new Nan::Callback(info[0].As<Function>());
 
 	HRESULT hr;
 	ILongExposureInfraredFrameSource* pLongExposureInfraredFrameSource = NULL;
@@ -595,33 +585,32 @@ NAN_METHOD(OpenLongExposureInfraredReaderFunction)
 	uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
 	if (SUCCEEDED(hr))
 	{
-		NanReturnValue(NanTrue());
+		info.GetReturnValue().Set(true);
 	}
 	else
 	{
-		NanReturnValue(NanFalse());
+		info.GetReturnValue().Set(false);
 	}
 }
 
 NAN_METHOD(CloseLongExposureInfraredReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mLongExposureInfraredReaderMutex);
 	m_bLongExposureInfraredThreadRunning = false;
 	SafeRelease(m_pLongExposureInfraredFrameReader);
 	uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
 
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
 NAUV_WORK_CB(DepthProgress_) {
+	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mDepthReaderMutex);
-	NanScope();
 	if(m_pDepthReaderCallback != NULL)
 	{
 		//reuse the existing buffer
-		v8::Local<v8::Object> v8DepthPixels = NanNew(m_persistentDepthPixels);
+		v8::Local<v8::Object> v8DepthPixels = Nan::New(m_persistentDepthPixels);
 		char* data = node::Buffer::Data(v8DepthPixels);
 		memcpy(data, m_pDepthPixels, cDepthWidth * cDepthHeight);
 
@@ -719,7 +708,6 @@ void DepthReaderThreadLoop(void *arg)
 
 NAN_METHOD(OpenDepthReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mDepthReaderMutex);
 	if(m_pDepthReaderCallback)
@@ -728,7 +716,7 @@ NAN_METHOD(OpenDepthReaderFunction)
 		m_pDepthReaderCallback = NULL;
 	}
 
-	m_pDepthReaderCallback = new NanCallback(args[0].As<Function>());
+	m_pDepthReaderCallback = new Nan::Callback(info[0].As<Function>());
 
 	HRESULT hr;
 	IDepthFrameSource* pDepthFrameSource = NULL;
@@ -749,86 +737,87 @@ NAN_METHOD(OpenDepthReaderFunction)
 	uv_mutex_unlock(&m_mDepthReaderMutex);
 	if (SUCCEEDED(hr))
 	{
-		NanReturnValue(NanTrue());
+		info.GetReturnValue().Set(true);
 	}
 	else
 	{
-		NanReturnValue(NanFalse());
+		info.GetReturnValue().Set(false);
 	}
 }
 
 NAN_METHOD(CloseDepthReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mDepthReaderMutex);
 	m_bDepthThreadRunning = false;
 	SafeRelease(m_pDepthFrameReader);
 	uv_mutex_unlock(&m_mDepthReaderMutex);
 
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
 v8::Local<v8::Object> getV8BodyFrame_()
 {
-	v8::Local<v8::Object> v8BodyResult = NanNew<v8::Object>();
+	Nan::EscapableHandleScope scope;
+	v8::Local<v8::Object> v8BodyResult = Nan::New<v8::Object>();
 
 	//bodies
-	v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(BODY_COUNT);
+	v8::Local<v8::Array> v8bodies = Nan::New<v8::Array>(BODY_COUNT);
 	for(int i = 0; i < BODY_COUNT; i++)
 	{
 		//create a body object
-		v8::Local<v8::Object> v8body = NanNew<v8::Object>();
-		v8body->Set(NanNew<v8::String>("bodyIndex"), NanNew<v8::Number>(i));
-		v8body->Set(NanNew<v8::String>("tracked"), NanNew<v8::Boolean>(m_jsBodyFrame.bodies[i].tracked));
+		v8::Local<v8::Object> v8body = Nan::New<v8::Object>();
+
+		Nan::Set(v8body, Nan::New<String>("bodyIndex").ToLocalChecked(), Nan::New<v8::Number>(i));
+		Nan::Set(v8body, Nan::New<v8::String>("tracked").ToLocalChecked(), Nan::New<v8::Boolean>(m_jsBodyFrame.bodies[i].tracked));
 		if(m_jsBodyFrame.bodies[i].tracked)
 		{
-			v8body->Set(NanNew<v8::String>("trackingId"), NanNew<v8::Number>(static_cast<double>(m_jsBodyFrame.bodies[i].trackingId)));
+			Nan::Set(v8body, Nan::New<v8::String>("trackingId").ToLocalChecked(), Nan::New<v8::Number>(static_cast<double>(m_jsBodyFrame.bodies[i].trackingId)));
 			//hand states
-			v8body->Set(NanNew<v8::String>("leftHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
-			v8body->Set(NanNew<v8::String>("rightHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
-			v8::Local<v8::Array> v8joints = NanNew<v8::Array>();
+			Nan::Set(v8body, Nan::New<v8::String>("leftHandState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
+			Nan::Set(v8body, Nan::New<v8::String>("rightHandState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
+			v8::Local<v8::Array> v8joints = Nan::New<v8::Array>();
 			//joints
 			for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
 			{
-				v8::Local<v8::Object> v8joint = NanNew<v8::Object>();
-				v8joint->Set(NanNew<v8::String>("depthX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthX));
-				v8joint->Set(NanNew<v8::String>("depthY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthY));
-				v8joint->Set(NanNew<v8::String>("colorX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorX));
-				v8joint->Set(NanNew<v8::String>("colorY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorY));
-				v8joint->Set(NanNew<v8::String>("cameraX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraX));
-				v8joint->Set(NanNew<v8::String>("cameraY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraY));
-				v8joint->Set(NanNew<v8::String>("cameraZ"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraZ));
+				v8::Local<v8::Object> v8joint = Nan::New<v8::Object>();
+				Nan::Set(v8joint, Nan::New<v8::String>("depthX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthX));
+				Nan::Set(v8joint, Nan::New<v8::String>("depthY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthY));
+				Nan::Set(v8joint, Nan::New<v8::String>("colorX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorX));
+				Nan::Set(v8joint, Nan::New<v8::String>("colorY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorY));
+				Nan::Set(v8joint, Nan::New<v8::String>("cameraX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraX));
+				Nan::Set(v8joint, Nan::New<v8::String>("cameraY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraY));
+				Nan::Set(v8joint, Nan::New<v8::String>("cameraZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraZ));
 				//body ground
 				if(m_jsBodyFrame.bodies[i].joints[j].hasFloorData)
 				{
-					v8joint->Set(NanNew<v8::String>("floorDepthX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorDepthX));
-					v8joint->Set(NanNew<v8::String>("floorDepthY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorDepthY));
-					v8joint->Set(NanNew<v8::String>("floorColorX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorColorX));
-					v8joint->Set(NanNew<v8::String>("floorColorY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorColorY));
-					v8joint->Set(NanNew<v8::String>("floorCameraX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraX));
-					v8joint->Set(NanNew<v8::String>("floorCameraY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraY));
-					v8joint->Set(NanNew<v8::String>("floorCameraZ"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraZ));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorDepthX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorDepthX));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorDepthY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorDepthY));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorColorX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorColorX));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorColorY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorColorY));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraX));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraY));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraZ));
 				}
-				v8joints->Set(NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].jointType), v8joint);
+				Nan::Set(v8joints, Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].jointType), v8joint);
 			}
-			v8body->Set(NanNew<v8::String>("joints"), v8joints);
+			Nan::Set(v8body, Nan::New<v8::String>("joints").ToLocalChecked(), v8joints);
 		}
-		v8bodies->Set(i, v8body);
+		Nan::Set(v8bodies, i, v8body);
 	}
-	v8BodyResult->Set(NanNew<v8::String>("bodies"), v8bodies);
+	Nan::Set(v8BodyResult, Nan::New<v8::String>("bodies").ToLocalChecked(), v8bodies);
 
 	//floor plane
 	if(m_jsBodyFrame.hasFloorClipPlane) {
-		v8::Local<v8::Object> v8FloorClipPlane = NanNew<v8::Object>();
-		v8FloorClipPlane->Set(NanNew<v8::String>("x"), NanNew<v8::Number>(m_jsBodyFrame.floorClipPlaneX));
-		v8FloorClipPlane->Set(NanNew<v8::String>("y"), NanNew<v8::Number>(m_jsBodyFrame.floorClipPlaneY));
-		v8FloorClipPlane->Set(NanNew<v8::String>("z"), NanNew<v8::Number>(m_jsBodyFrame.floorClipPlaneZ));
-		v8FloorClipPlane->Set(NanNew<v8::String>("w"), NanNew<v8::Number>(m_jsBodyFrame.floorClipPlaneW));
-		v8BodyResult->Set(NanNew<v8::String>("floorClipPlane"), v8FloorClipPlane);
+		v8::Local<v8::Object> v8FloorClipPlane = Nan::New<v8::Object>();
+		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("x").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.floorClipPlaneX));
+		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("y").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.floorClipPlaneY));
+		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("z").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.floorClipPlaneZ));
+		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("w").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.floorClipPlaneW));
+		Nan::Set(v8BodyResult, Nan::New<v8::String>("floorClipPlane").ToLocalChecked(), v8FloorClipPlane);
 	}
 
-	return v8BodyResult;
+	return scope.Escape(v8BodyResult);
 }
 
 void calculateCameraAngle_(Vector4 floorClipPlane, float* cameraAngleRadians, float* cosCameraAngle, float*sinCameraAngle)
@@ -845,8 +834,8 @@ float getJointDistanceFromFloor_(Vector4 floorClipPlane, Joint joint, float came
 
 NAUV_WORK_CB(BodyProgress_)
 {
+	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mBodyReaderMutex);
-	NanScope();
 	if(m_pBodyReaderCallback != NULL)
 	{
 		v8::Local<v8::Object> v8BodyResult = getV8BodyFrame_();
@@ -1002,7 +991,6 @@ void BodyReaderThreadLoop(void *arg)
 
 NAN_METHOD(OpenBodyReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mBodyReaderMutex);
 	if(m_pBodyReaderCallback)
@@ -1011,7 +999,7 @@ NAN_METHOD(OpenBodyReaderFunction)
 		m_pBodyReaderCallback = NULL;
 	}
 
-	m_pBodyReaderCallback = new NanCallback(args[0].As<Function>());
+	m_pBodyReaderCallback = new Nan::Callback(info[0].As<Function>());
 
 	HRESULT hr;
 	IBodyFrameSource* pBodyFrameSource = NULL;
@@ -1032,79 +1020,78 @@ NAN_METHOD(OpenBodyReaderFunction)
 	uv_mutex_unlock(&m_mBodyReaderMutex);
 	if (SUCCEEDED(hr))
 	{
-		NanReturnValue(NanTrue());
+		info.GetReturnValue().Set(true);
 	}
 	else
 	{
-		NanReturnValue(NanFalse());
+		info.GetReturnValue().Set(false);
 	}
 }
 
 NAN_METHOD(CloseBodyReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mBodyReaderMutex);
 	m_bBodyThreadRunning = false;
 	SafeRelease(m_pBodyFrameReader);
 	uv_mutex_unlock(&m_mBodyReaderMutex);
 
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
 
 
 NAUV_WORK_CB(MultiSourceProgress_) {
+	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
-	NanScope();
 	if(m_pMultiSourceReaderCallback != NULL)
 	{
 		//build object for callback
-		v8::Local<v8::Object> v8Result = NanNew<v8::Object>();
+		v8::Local<v8::Object> v8Result = Nan::New<v8::Object>();
 
 		if(NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes)
 		{
 			//reuse the existing buffer
-			v8::Local<v8::Object> v8ColorPixels = NanNew(m_persistentColorPixels);
+			v8::Local<v8::Object> v8ColorPixels = Nan::New(m_persistentColorPixels);
 			char* data = node::Buffer::Data(v8ColorPixels);
 			memcpy(data, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
 
-			v8::Local<v8::Object> v8ColorResult = NanNew<v8::Object>();
-			v8ColorResult->Set(NanNew<v8::String>("buffer"), v8ColorPixels);
-			v8Result->Set(NanNew<v8::String>("color"), v8ColorResult);
+			v8::Local<v8::Object> v8ColorResult = Nan::New<v8::Object>();
+			Nan::Set(v8ColorResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8ColorPixels);
+			Nan::Set(v8Result, Nan::New<v8::String>("color").ToLocalChecked(), v8ColorResult);
 		}
 
 		if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
 		{
 			//reuse the existing buffer
-			v8::Local<v8::Object> v8DepthPixels = NanNew(m_persistentDepthPixels);
+			v8::Local<v8::Object> v8DepthPixels = Nan::New(m_persistentDepthPixels);
 			char* data = node::Buffer::Data(v8DepthPixels);
 			memcpy(data, m_pDepthPixels, cDepthWidth * cDepthHeight);
 
-			v8::Local<v8::Object> v8DepthResult = NanNew<v8::Object>();
-			v8DepthResult->Set(NanNew<v8::String>("buffer"), v8DepthPixels);
-			v8Result->Set(NanNew<v8::String>("depth"), v8DepthResult);
+			v8::Local<v8::Object> v8DepthResult = Nan::New<v8::Object>();
+			Nan::Set(v8DepthResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8DepthPixels);
+			Nan::Set(v8Result, Nan::New<v8::String>("depth").ToLocalChecked(), v8DepthResult);
 		}
 
 		if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
 		{
 			v8::Local<v8::Object> v8BodyResult = getV8BodyFrame_();
 
-			v8Result->Set(NanNew<v8::String>("body"), v8BodyResult);
+			Nan::Set(v8Result, Nan::New<v8::String>("body").ToLocalChecked(), v8BodyResult);
 		}
 
 		if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
 		{
-			v8::Local<v8::Object> v8BodyIndexColorResult = NanNew<v8::Object>();
+			v8::Local<v8::Object> v8BodyIndexColorResult = Nan::New<v8::Object>();
 
 			//persistent handle of array with color buffers
-			v8::Local<v8::Object> v8BodyIndexColorPixels = NanNew(m_persistentBodyIndexColorPixels);
+			v8::Local<v8::Object> v8BodyIndexColorPixels = Nan::New(m_persistentBodyIndexColorPixels);
 
-			v8::Local<v8::Array> v8bodies = NanNew<v8::Array>(BODY_COUNT);
+			v8::Local<v8::Array> v8bodies = Nan::New<v8::Array>(BODY_COUNT);
 			for(int i = 0; i < BODY_COUNT; i++)
 			{
-				v8::Local<v8::Object> v8body = NanNew<v8::Object>();
-				v8body->Set(NanNew<v8::String>("bodyIndex"), NanNew<v8::Number>(i));
+				v8::Local<v8::Object> v8body = Nan::New<v8::Object>();
+				Nan::Set(v8body, Nan::New<v8::String>("bodyIndex").ToLocalChecked(), Nan::New<v8::Number>(i));
 				//something weird is going on: every x frames hasPixels is false, but body is still tracked?
 				if(m_jsBodyFrame.bodies[i].trackPixels && (m_jsBodyFrame.bodies[i].hasPixels || m_jsBodyFrame.bodies[i].tracked)) {
 					//reuse the existing buffer
@@ -1112,13 +1099,13 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 					char* data = node::Buffer::Data(v8ColorPixels);
 					size_t len = node::Buffer::Length(v8ColorPixels);
 					memcpy(data, m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
-					v8body->Set(NanNew<v8::String>("buffer"), v8ColorPixels);
+					Nan::Set(v8body, Nan::New<v8::String>("buffer").ToLocalChecked(), v8ColorPixels);
 				}
-				v8bodies->Set(i, v8body);
+				Nan::Set(v8bodies, i, v8body);
 			}
-			v8BodyIndexColorResult->Set(NanNew<v8::String>("bodies"), v8bodies);
+			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("bodies").ToLocalChecked(), v8bodies);
 
-			v8Result->Set(NanNew<v8::String>("bodyIndexColor"), v8BodyIndexColorResult);
+			Nan::Set(v8Result, Nan::New<v8::String>("bodyIndexColor").ToLocalChecked(), v8BodyIndexColorResult);
 		}
 
 		v8::Local<v8::Value> argv[] = {
@@ -1569,7 +1556,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 
 NAN_METHOD(OpenMultiSourceReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
 	if(m_pMultiSourceReaderCallback)
@@ -1578,17 +1564,16 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 		m_pMultiSourceReaderCallback = NULL;
 	}
 
-	Local<Object> jsOptions = args[0].As<Object>();
-	Local<Function> jsCallback = jsOptions->Get(NanNew<v8::String>("callback")).As<Function>();
-	m_enabledFrameTypes = static_cast<unsigned long>(jsOptions->Get(NanNew<v8::String>("frameTypes")).As<Number>()->Value());
+	Local<Object> jsOptions = info[0].As<Object>();
+	Local<Function> jsCallback = jsOptions->Get(Nan::New<v8::String>("callback").ToLocalChecked()).As<Function>();
+	m_enabledFrameTypes = static_cast<unsigned long>(jsOptions->Get(Nan::New<v8::String>("frameTypes").ToLocalChecked()).As<Number>()->Value());
 
-	if(jsOptions->Get(NanNew<v8::String>("includeJointFloorData"))->IsBoolean())
+	m_includeJointFloorData = false;
+
+	Nan::MaybeLocal<v8::Value> v8IncludeJointFloorData = Nan::Get(jsOptions, Nan::New<v8::String>("includeJointFloorData").ToLocalChecked());
+	if(!v8IncludeJointFloorData.IsEmpty())
 	{
-		m_includeJointFloorData = jsOptions->Get(NanNew<v8::String>("includeJointFloorData")).As<Boolean>()->Value();
-	}
-	else
-	{
-		m_includeJointFloorData = false;
+		m_includeJointFloorData = Nan::To<bool>(v8IncludeJointFloorData.ToLocalChecked()).FromJust();
 	}
 
 	//map our own frame types to the correct frame source types
@@ -1642,7 +1627,7 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Audio;
 	}
 
-	m_pMultiSourceReaderCallback = new NanCallback(jsCallback);
+	m_pMultiSourceReaderCallback = new Nan::Callback(jsCallback);
 
 	HRESULT hr = m_pKinectSensor->OpenMultiSourceFrameReader(m_enabledFrameSourceTypes, &m_pMultiSourceFrameReader);
 
@@ -1655,29 +1640,27 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 	uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 	if (SUCCEEDED(hr))
 	{
-		NanReturnValue(NanTrue());
+		info.GetReturnValue().Set(true);
 	}
 	else
 	{
-		NanReturnValue(NanFalse());
+		info.GetReturnValue().Set(false);
 	}
 }
 
 NAN_METHOD(CloseMultiSourceReaderFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
 	m_bMultiSourceThreadRunning = false;
 	SafeRelease(m_pMultiSourceFrameReader);
 	uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
 NAN_METHOD(TrackPixelsForBodyIndicesFunction)
 {
-	NanScope();
 
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
 	int i;
@@ -1685,10 +1668,10 @@ NAN_METHOD(TrackPixelsForBodyIndicesFunction)
 	{
 		m_jsBodyFrame.bodies[i].trackPixels = false;
 	}
-	Local<Object> jsOptions = args[0].As<Object>();
+	Local<Object> jsOptions = info[0].As<Object>();
 	if(jsOptions->IsArray())
 	{
-		Local<Array> jsBodyIndices = args[0].As<Array>();
+		Local<Array> jsBodyIndices = info[0].As<Array>();
 		int len = jsBodyIndices->Length();
 		for(i = 0; i < len; i++)
 		{
@@ -1700,32 +1683,31 @@ NAN_METHOD(TrackPixelsForBodyIndicesFunction)
 
 	uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 
-	NanReturnValue(NanTrue());
+	info.GetReturnValue().Set(true);
 }
 
-void Init(Handle<Object> exports)
+NAN_MODULE_INIT(Init)
 {
-	NanScope();
 
 	//color
 	uv_mutex_init(&m_mColorReaderMutex);
 	uv_async_init(uv_default_loop(), &m_aColorAsync, ColorProgress_);
-	NanAssignPersistent(m_persistentColorPixels, NanNewBufferHandle((char *)m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)));
+	m_persistentColorPixels.Reset<v8::Object>(Nan::CopyBuffer((char *)m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
 
 	//infrared
 	uv_mutex_init(&m_mInfraredReaderMutex);
 	uv_async_init(uv_default_loop(), &m_aInfraredAsync, InfraredProgress_);
-	NanAssignPersistent(m_persistentInfraredPixels, NanNewBufferHandle(m_pInfraredPixels, cInfraredWidth * cInfraredHeight));
+	m_persistentInfraredPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pInfraredPixels, cInfraredWidth * cInfraredHeight).ToLocalChecked());
 
 	//long exposure infrared
 	uv_mutex_init(&m_mLongExposureInfraredReaderMutex);
 	uv_async_init(uv_default_loop(), &m_aLongExposureInfraredAsync, LongExposureInfraredProgress_);
-	NanAssignPersistent(m_persistentLongExposureInfraredPixels, NanNewBufferHandle(m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight));
+	m_persistentLongExposureInfraredPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight).ToLocalChecked());
 
 	//depth
 	uv_mutex_init(&m_mDepthReaderMutex);
 	uv_async_init(uv_default_loop(), &m_aDepthAsync, DepthProgress_);
-	NanAssignPersistent(m_persistentDepthPixels, NanNewBufferHandle(m_pDepthPixels, cDepthWidth * cDepthHeight));
+	m_persistentDepthPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pDepthPixels, cDepthWidth * cDepthHeight).ToLocalChecked());
 
 	//body
 	uv_mutex_init(&m_mBodyReaderMutex);
@@ -1734,43 +1716,43 @@ void Init(Handle<Object> exports)
 	//multisource
 	uv_mutex_init(&m_mMultiSourceReaderMutex);
 	uv_async_init(uv_default_loop(), &m_aMultiSourceAsync, MultiSourceProgress_);
-	v8::Local<v8::Object> v8BodyIndexColorPixels = NanNew<v8::Object>();
+	v8::Local<v8::Object> v8BodyIndexColorPixels = Nan::New<v8::Object>();
 	for(int i = 0; i < BODY_COUNT; i++)
 	{
-		v8BodyIndexColorPixels->Set(i, NanNewBufferHandle((char *)m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)));
+		Nan::Set(v8BodyIndexColorPixels, i, Nan::CopyBuffer((char *)m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
 	}
-	NanAssignPersistent(m_persistentBodyIndexColorPixels, v8BodyIndexColorPixels);
+	m_persistentBodyIndexColorPixels.Reset<v8::Object>(v8BodyIndexColorPixels);
 
-	exports->Set(NanNew<String>("open"),
-		NanNew<FunctionTemplate>(OpenFunction)->GetFunction());
-	exports->Set(NanNew<String>("close"),
-		NanNew<FunctionTemplate>(CloseFunction)->GetFunction());
-	exports->Set(NanNew<String>("openColorReader"),
-		NanNew<FunctionTemplate>(OpenColorReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("closeColorReader"),
-		NanNew<FunctionTemplate>(CloseColorReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("openInfraredReader"),
-		NanNew<FunctionTemplate>(OpenInfraredReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("closeInfraredReader"),
-		NanNew<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("openLongExposureInfraredReader"),
-		NanNew<FunctionTemplate>(OpenLongExposureInfraredReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("closeLongExposureInfraredReader"),
-		NanNew<FunctionTemplate>(CloseLongExposureInfraredReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("openDepthReader"),
-		NanNew<FunctionTemplate>(OpenDepthReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("closeDepthReader"),
-		NanNew<FunctionTemplate>(CloseDepthReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("openBodyReader"),
-		NanNew<FunctionTemplate>(OpenBodyReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("closeBodyReader"),
-		NanNew<FunctionTemplate>(CloseBodyReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("openMultiSourceReader"),
-		NanNew<FunctionTemplate>(OpenMultiSourceReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("closeMultiSourceReader"),
-		NanNew<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
-	exports->Set(NanNew<String>("trackPixelsForBodyIndices"),
-		NanNew<FunctionTemplate>(TrackPixelsForBodyIndicesFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("open").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("close").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("openColorReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenColorReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("closeColorReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseColorReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("openInfraredReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenInfraredReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("closeInfraredReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("openLongExposureInfraredReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenLongExposureInfraredReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("closeLongExposureInfraredReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseLongExposureInfraredReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("openDepthReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenDepthReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("closeDepthReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseDepthReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("openBodyReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenBodyReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("closeBodyReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseBodyReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("openMultiSourceReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenMultiSourceReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("closeMultiSourceReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("trackPixelsForBodyIndices").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(TrackPixelsForBodyIndicesFunction)->GetFunction());
 }
 
 NODE_MODULE(kinect2, Init)

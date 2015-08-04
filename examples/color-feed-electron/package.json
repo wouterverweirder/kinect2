@@ -1,6 +1,6 @@
 {
   "name": "color-feed-electron",
-  "version": "0.0.15",
+  "version": "0.0.20",
   "description": "display color feed in electron app",
   "main": "index.js",
   "scripts": {
