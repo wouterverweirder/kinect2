@@ -67,21 +67,8 @@
 						var cameraAngleRadians= Math.atan(frame.body.floorClipPlane.z / frame.body.floorClipPlane.y);
 						var cosCameraAngle = Math.cos(cameraAngleRadians);
 						var sinCameraAngle = Math.sin(cameraAngleRadians);
-
-						var jointData = {};
-						jointData.X = joint.cameraX;
-						jointData.Y = joint.cameraY;
-						jointData.Z = joint.cameraZ;
-						jointData.height = joint.cameraY;
-
-						//transform space from KV to DV
-						var zprime = joint.cameraZ * cosCameraAngle + joint.cameraY * sinCameraAngle;
 						var yprime = joint.cameraY * cosCameraAngle + joint.cameraZ * sinCameraAngle;
-
-						jointData.rotatedZ = zprime;
-						jointData.rotatedY = yprime;
-						jointData.rotatedX = jointData.X;
-						jointData.rotatedHeight = frame.body.floorClipPlane.w + yprime;
+						var jointDistanceFromFloor = frame.body.floorClipPlane.w + yprime;
 
 						//show height in canvas
 						colorCtx.beginPath();
@@ -90,7 +77,7 @@
 						colorCtx.fill();
 						colorCtx.closePath();
 						colorCtx.font = "48px sans";
-						colorCtx.fillText(jointData.rotatedHeight.toFixed(2) + "m", 20 + joint.colorX * 1920, joint.colorY * 1080);
+						colorCtx.fillText(jointDistanceFromFloor.toFixed(2) + "m", 20 + joint.colorX * 1920, joint.colorY * 1080);
 					}
 				}
 			}

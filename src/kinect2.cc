@@ -73,6 +73,8 @@ uv_thread_t							m_tMultiSourceThread;
 bool 										m_bMultiSourceThreadRunning = false;
 Persistent<Object>			m_persistentBodyIndexColorPixels;
 
+bool 										m_includeJointFloorData = false;
+
 NAN_METHOD(OpenFunction)
 {
 	NanScope();
@@ -785,7 +787,7 @@ v8::Local<v8::Object> getV8BodyFrame_()
 			//hand states
 			v8body->Set(NanNew<v8::String>("leftHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
 			v8body->Set(NanNew<v8::String>("rightHandState"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
-			v8::Local<v8::Object> v8joints = NanNew<v8::Object>();
+			v8::Local<v8::Array> v8joints = NanNew<v8::Array>();
 			//joints
 			for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
 			{
@@ -797,6 +799,17 @@ v8::Local<v8::Object> getV8BodyFrame_()
 				v8joint->Set(NanNew<v8::String>("cameraX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraX));
 				v8joint->Set(NanNew<v8::String>("cameraY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraY));
 				v8joint->Set(NanNew<v8::String>("cameraZ"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraZ));
+				//body ground
+				if(m_jsBodyFrame.bodies[i].joints[j].hasFloorData)
+				{
+					v8joint->Set(NanNew<v8::String>("floorDepthX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorDepthX));
+					v8joint->Set(NanNew<v8::String>("floorDepthY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorDepthY));
+					v8joint->Set(NanNew<v8::String>("floorColorX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorColorX));
+					v8joint->Set(NanNew<v8::String>("floorColorY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorColorY));
+					v8joint->Set(NanNew<v8::String>("floorCameraX"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraX));
+					v8joint->Set(NanNew<v8::String>("floorCameraY"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraY));
+					v8joint->Set(NanNew<v8::String>("floorCameraZ"), NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraZ));
+				}
 				v8joints->Set(NanNew<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].jointType), v8joint);
 			}
 			v8body->Set(NanNew<v8::String>("joints"), v8joints);
@@ -818,7 +831,20 @@ v8::Local<v8::Object> getV8BodyFrame_()
 	return v8BodyResult;
 }
 
-NAUV_WORK_CB(BodyProgress_) {
+void calculateCameraAngle_(Vector4 floorClipPlane, float* cameraAngleRadians, float* cosCameraAngle, float*sinCameraAngle)
+{
+	*cameraAngleRadians = atan(floorClipPlane.z / floorClipPlane.y);
+	*cosCameraAngle = cos(*cameraAngleRadians);
+	*sinCameraAngle = sin(*cameraAngleRadians);
+}
+
+float getJointDistanceFromFloor_(Vector4 floorClipPlane, Joint joint, float cameraAngleRadians, float cosCameraAngle, float sinCameraAngle)
+{
+	return floorClipPlane.w + joint.Position.Y * cosCameraAngle + joint.Position.Z * sinCameraAngle;
+}
+
+NAUV_WORK_CB(BodyProgress_)
+{
 	uv_mutex_lock(&m_mBodyReaderMutex);
 	NanScope();
 	if(m_pBodyReaderCallback != NULL)
@@ -870,6 +896,8 @@ void BodyReaderThreadLoop(void *arg)
 				m_jsBodyFrame.floorClipPlaneY = floorClipPlane.y;
 				m_jsBodyFrame.floorClipPlaneZ = floorClipPlane.z;
 				m_jsBodyFrame.floorClipPlaneW = floorClipPlane.w;
+				//camera angle
+				calculateCameraAngle_(floorClipPlane, &m_jsBodyFrame.cameraAngle, &m_jsBodyFrame.cosCameraAngle, &m_jsBodyFrame.sinCameraAngle);
 			}
 			for (int i = 0; i < _countof(ppBodies); ++i)
 			{
@@ -913,6 +941,40 @@ void BodyReaderThreadLoop(void *arg)
 								m_jsBodyFrame.bodies[i].joints[j].cameraZ = joints[j].Position.Z;
 
 								m_jsBodyFrame.bodies[i].joints[j].jointType = joints[j].JointType;
+							}
+							//calculate body ground position
+							if(m_includeJointFloorData && m_jsBodyFrame.hasFloorClipPlane)
+							{
+								for (int j = 0; j < _countof(joints); ++j)
+								{
+									m_jsBodyFrame.bodies[i].joints[j].hasFloorData = true;
+									//distance of joint to floor
+									float distance = getJointDistanceFromFloor_(floorClipPlane, joints[j], m_jsBodyFrame.cameraAngle, m_jsBodyFrame.cosCameraAngle, m_jsBodyFrame.sinCameraAngle);
+									CameraSpacePoint p;
+									p.X = joints[j].Position.X;
+									p.Y = joints[j].Position.Y - distance;
+									p.Z = joints[j].Position.Z;
+
+									m_pCoordinateMapper->MapCameraPointToDepthSpace(p, &depthPoint);
+									m_pCoordinateMapper->MapCameraPointToColorSpace(p, &colorPoint);
+
+									m_jsBodyFrame.bodies[i].joints[j].floorDepthX = depthPoint.X / cDepthWidth;
+									m_jsBodyFrame.bodies[i].joints[j].floorDepthY = depthPoint.Y / cDepthHeight;
+
+									m_jsBodyFrame.bodies[i].joints[j].floorColorX = colorPoint.X / cColorWidth;
+									m_jsBodyFrame.bodies[i].joints[j].floorColorY = colorPoint.Y / cColorHeight;
+
+									m_jsBodyFrame.bodies[i].joints[j].floorCameraX = p.X;
+									m_jsBodyFrame.bodies[i].joints[j].floorCameraY = p.Y;
+									m_jsBodyFrame.bodies[i].joints[j].floorCameraZ = p.Z;
+								}
+							}
+							else
+							{
+								for (int j = 0; j < _countof(joints); ++j)
+								{
+									m_jsBodyFrame.bodies[i].joints[j].hasFloorData = false;
+								}
 							}
 						}
 					}
@@ -1372,6 +1434,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 						m_jsBodyFrame.floorClipPlaneY = floorClipPlane.y;
 						m_jsBodyFrame.floorClipPlaneZ = floorClipPlane.z;
 						m_jsBodyFrame.floorClipPlaneW = floorClipPlane.w;
+						calculateCameraAngle_(floorClipPlane, &m_jsBodyFrame.cameraAngle, &m_jsBodyFrame.cosCameraAngle, &m_jsBodyFrame.sinCameraAngle);
 					}
 					for (int i = 0; i < _countof(ppBodies); ++i)
 					{
@@ -1414,6 +1477,40 @@ void MultiSourceReaderThreadLoop(void *arg)
 										m_jsBodyFrame.bodies[i].joints[j].cameraZ = joints[j].Position.Z;
 
 										m_jsBodyFrame.bodies[i].joints[j].jointType = joints[j].JointType;
+									}
+									//calculate body ground position
+									if(m_includeJointFloorData && m_jsBodyFrame.hasFloorClipPlane)
+									{
+										for (int j = 0; j < _countof(joints); ++j)
+										{
+											m_jsBodyFrame.bodies[i].joints[j].hasFloorData = true;
+											//distance of joint to floor
+											float distance = getJointDistanceFromFloor_(floorClipPlane, joints[j], m_jsBodyFrame.cameraAngle, m_jsBodyFrame.cosCameraAngle, m_jsBodyFrame.sinCameraAngle);
+											CameraSpacePoint p;
+											p.X = joints[j].Position.X;
+											p.Y = joints[j].Position.Y - distance;
+											p.Z = joints[j].Position.Z;
+
+											m_pCoordinateMapper->MapCameraPointToDepthSpace(p, &depthPoint);
+											m_pCoordinateMapper->MapCameraPointToColorSpace(p, &colorPoint);
+
+											m_jsBodyFrame.bodies[i].joints[j].floorDepthX = depthPoint.X / cDepthWidth;
+											m_jsBodyFrame.bodies[i].joints[j].floorDepthY = depthPoint.Y / cDepthHeight;
+
+											m_jsBodyFrame.bodies[i].joints[j].floorColorX = colorPoint.X / cColorWidth;
+											m_jsBodyFrame.bodies[i].joints[j].floorColorY = colorPoint.Y / cColorHeight;
+
+											m_jsBodyFrame.bodies[i].joints[j].floorCameraX = p.X;
+											m_jsBodyFrame.bodies[i].joints[j].floorCameraY = p.Y;
+											m_jsBodyFrame.bodies[i].joints[j].floorCameraZ = p.Z;
+										}
+									}
+									else
+									{
+										for (int j = 0; j < _countof(joints); ++j)
+										{
+											m_jsBodyFrame.bodies[i].joints[j].hasFloorData = false;
+										}
 									}
 								}
 							}
@@ -1484,6 +1581,15 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 	Local<Object> jsOptions = args[0].As<Object>();
 	Local<Function> jsCallback = jsOptions->Get(NanNew<v8::String>("callback")).As<Function>();
 	m_enabledFrameTypes = static_cast<unsigned long>(jsOptions->Get(NanNew<v8::String>("frameTypes")).As<Number>()->Value());
+
+	if(jsOptions->Get(NanNew<v8::String>("includeJointFloorData"))->IsBoolean())
+	{
+		m_includeJointFloorData = jsOptions->Get(NanNew<v8::String>("includeJointFloorData")).As<Boolean>()->Value();
+	}
+	else
+	{
+		m_includeJointFloorData = false;
+	}
 
 	//map our own frame types to the correct frame source types
 	m_enabledFrameSourceTypes = FrameSourceTypes::FrameSourceTypes_None;

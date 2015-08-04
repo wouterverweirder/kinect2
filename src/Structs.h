@@ -12,6 +12,16 @@ typedef struct _JSJoint
 	float cameraX;
 	float cameraY;
 	float cameraZ;
+	//
+	bool hasFloorData;
+	float floorDepthX;
+	float floorDepthY;
+	float floorColorX;
+	float floorColorY;
+	float floorCameraX;
+	float floorCameraY;
+	float floorCameraZ;
+	//
 	int jointType;
 } JSJoint;
 
@@ -33,11 +43,16 @@ typedef struct _JSBody
 typedef struct _JSBodyFrame
 {
 	JSBody bodies[BODY_COUNT];
+	//
 	bool hasFloorClipPlane;
 	float floorClipPlaneX;
 	float floorClipPlaneY;
 	float floorClipPlaneZ;
 	float floorClipPlaneW;
+	//
+	float cameraAngle;
+	float cosCameraAngle;
+	float sinCameraAngle;
 } JSBodyFrame;
 
 #endif
