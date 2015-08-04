@@ -48,6 +48,16 @@
 		return length;
 	}
 
+	function calculatePixelWidth(horizontalFieldOfView, depth)
+	{
+		// measure the size of the pixel
+		var hFov = horizontalFieldOfView / 2;
+		var numPixels = hiddenCanvas.width / 2;
+		var T = Math.tan((Math.PI * 180) / hFov);
+		var pixelWidth = T * depth;
+		return pixelWidth / numPixels;
+	}
+
 	if(kinect.open()) {
 		kinect.on('multiSourceFrame', function(frame){
 			var closestBodyIndex = getClosestBodyIndex(frame.body.bodies);
@@ -81,14 +91,10 @@
 								topJoint = joint;
 							}
 						}
-						var length = calculateLength([
-							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.head],
-							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.neck],
-							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineShoulder],
-							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineMid],
-							frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineBase]
-						]);
-						var scale = 0.3 / length; //scale to fixed size - independent of distance of sensor
+
+						var pixelWidth = calculatePixelWidth(frame.bodyIndexColor.horizontalFieldOfView, frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineMid].cameraZ * 1000);
+						scale = 0.3 * pixelWidth;
+
 						//head joint is in middle of head, add area (y-distance from neck to head joint) above
 						topJoint = {
 							colorX: topJoint.colorX,

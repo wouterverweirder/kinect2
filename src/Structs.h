@@ -12,6 +12,7 @@ typedef struct _JSJoint
 	float cameraX;
 	float cameraY;
 	float cameraZ;
+	USHORT rawDepth;
 	//
 	bool hasFloorData;
 	float floorDepthX;

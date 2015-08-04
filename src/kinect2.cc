@@ -30,12 +30,12 @@ DWORD										m_enabledFrameSourceTypes = 0;
 //this is the kinect SDK list + additional ones (body index in color space, etc...)
 unsigned long						m_enabledFrameTypes = 0;
 
-Nan::Callback*						m_pColorReaderCallback;
-Nan::Callback*						m_pInfraredReaderCallback;
-Nan::Callback*						m_pLongExposureInfraredReaderCallback;
-Nan::Callback*						m_pDepthReaderCallback;
-Nan::Callback*						m_pBodyReaderCallback;
-Nan::Callback*						m_pMultiSourceReaderCallback;
+Nan::Callback*					m_pColorReaderCallback;
+Nan::Callback*					m_pInfraredReaderCallback;
+Nan::Callback*					m_pLongExposureInfraredReaderCallback;
+Nan::Callback*					m_pDepthReaderCallback;
+Nan::Callback*					m_pBodyReaderCallback;
+Nan::Callback*					m_pMultiSourceReaderCallback;
 
 uv_mutex_t							m_mColorReaderMutex;
 uv_mutex_t							m_mInfraredReaderMutex;
@@ -48,21 +48,33 @@ uv_async_t							m_aColorAsync;
 uv_thread_t							m_tColorThread;
 bool 										m_bColorThreadRunning = false;
 Nan::Persistent<Object>	m_persistentColorPixels;
+float 									m_fColorHorizontalFieldOfView;
+float 									m_fColorVerticalFieldOfView;
+float 									m_fColorDiagonalFieldOfView;
 
 uv_async_t							m_aInfraredAsync;
 uv_thread_t							m_tInfraredThread;
 bool 										m_bInfraredThreadRunning = false;
 Nan::Persistent<Object>	m_persistentInfraredPixels;
+float 									m_fInfraredHorizontalFieldOfView;
+float 									m_fInfraredVerticalFieldOfView;
+float 									m_fInfraredDiagonalFieldOfView;
 
 uv_async_t							m_aLongExposureInfraredAsync;
 uv_thread_t							m_tLongExposureInfraredThread;
 bool 										m_bLongExposureInfraredThreadRunning = false;
 Nan::Persistent<Object>	m_persistentLongExposureInfraredPixels;
+float 									m_fLongExposureInfraredHorizontalFieldOfView;
+float 									m_fLongExposureInfraredVerticalFieldOfView;
+float 									m_fLongExposureInfraredDiagonalFieldOfView;
 
 uv_async_t							m_aDepthAsync;
 uv_thread_t							m_tDepthThread;
 bool 										m_bDepthThreadRunning = false;
 Nan::Persistent<Object> m_persistentDepthPixels;
+float 									m_fDepthHorizontalFieldOfView;
+float 									m_fDepthVerticalFieldOfView;
+float 									m_fDepthDiagonalFieldOfView;
 
 uv_async_t							m_aBodyAsync;
 uv_thread_t							m_tBodyThread;
@@ -176,8 +188,6 @@ void ColorReaderThreadLoop(void *arg)
 
 		IColorFrame* pColorFrame = NULL;
 		IFrameDescription* pColorFrameDescription = NULL;
-		int nColorWidth = 0;
-		int nColorHeight = 0;
 		ColorImageFormat imageFormat = ColorImageFormat_None;
 		UINT nColorBufferSize = 0;
 		RGBQUAD *pColorBuffer = NULL;
@@ -193,12 +203,17 @@ void ColorReaderThreadLoop(void *arg)
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pColorFrameDescription->get_Width(&nColorWidth);
+			hr = pColorFrameDescription->get_HorizontalFieldOfView(&m_fColorHorizontalFieldOfView);
 		}
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pColorFrameDescription->get_Height(&nColorHeight);
+			hr = pColorFrameDescription->get_VerticalFieldOfView(&m_fColorVerticalFieldOfView);
+		}
+
+		if (SUCCEEDED(hr))
+		{
+			hr = pColorFrameDescription->get_DiagonalFieldOfView(&m_fColorDiagonalFieldOfView);
 		}
 
 		if (SUCCEEDED(hr))
@@ -320,8 +335,6 @@ void InfraredReaderThreadLoop(void *arg)
 
 		IInfraredFrame* pInfraredFrame = NULL;
 		IFrameDescription* pInfraredFrameDescription = NULL;
-		int nInfraredWidth = 0;
-		int nInfraredHeight = 0;
 		UINT nInfraredBufferSize = 0;
 		UINT16 *pInfraredBuffer = NULL;
 
@@ -336,12 +349,17 @@ void InfraredReaderThreadLoop(void *arg)
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pInfraredFrameDescription->get_Width(&nInfraredWidth);
+			hr = pInfraredFrameDescription->get_HorizontalFieldOfView(&m_fInfraredHorizontalFieldOfView);
 		}
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pInfraredFrameDescription->get_Height(&nInfraredHeight);
+			hr = pInfraredFrameDescription->get_VerticalFieldOfView(&m_fInfraredVerticalFieldOfView);
+		}
+
+		if (SUCCEEDED(hr))
+		{
+			hr = pInfraredFrameDescription->get_DiagonalFieldOfView(&m_fInfraredDiagonalFieldOfView);
 		}
 
 		if (SUCCEEDED(hr))
@@ -351,12 +369,12 @@ void InfraredReaderThreadLoop(void *arg)
 
 		if (SUCCEEDED(hr))
 		{
-			if (m_pInfraredPixels && pInfraredBuffer && (nInfraredWidth == cInfraredWidth) && (nInfraredHeight == cInfraredHeight))
+			if (m_pInfraredPixels && pInfraredBuffer)
 			{
 				char* pDest = m_pInfraredPixels;
 
 				// end pixel is start + width*height - 1
-				const UINT16* pInfraredBufferEnd = pInfraredBuffer + (nInfraredWidth * nInfraredHeight);
+				const UINT16* pInfraredBufferEnd = pInfraredBuffer + (cInfraredWidth * cInfraredHeight);
 
 				while (pInfraredBuffer < pInfraredBufferEnd)
 				{
@@ -478,8 +496,6 @@ void LongExposureInfraredReaderThreadLoop(void *arg)
 
 		ILongExposureInfraredFrame* pLongExposureInfraredFrame = NULL;
 		IFrameDescription* pLongExposureInfraredFrameDescription = NULL;
-		int nLongExposureInfraredWidth = 0;
-		int nLongExposureInfraredHeight = 0;
 		UINT nLongExposureInfraredBufferSize = 0;
 		UINT16 *pLongExposureInfraredBuffer = NULL;
 
@@ -494,12 +510,17 @@ void LongExposureInfraredReaderThreadLoop(void *arg)
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pLongExposureInfraredFrameDescription->get_Width(&nLongExposureInfraredWidth);
+			hr = pLongExposureInfraredFrameDescription->get_HorizontalFieldOfView(&m_fLongExposureInfraredHorizontalFieldOfView);
 		}
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pLongExposureInfraredFrameDescription->get_Height(&nLongExposureInfraredHeight);
+			hr = pLongExposureInfraredFrameDescription->get_VerticalFieldOfView(&m_fLongExposureInfraredVerticalFieldOfView);
+		}
+
+		if (SUCCEEDED(hr))
+		{
+			hr = pLongExposureInfraredFrameDescription->get_DiagonalFieldOfView(&m_fLongExposureInfraredDiagonalFieldOfView);
 		}
 
 		if (SUCCEEDED(hr))
@@ -509,12 +530,12 @@ void LongExposureInfraredReaderThreadLoop(void *arg)
 
 		if (SUCCEEDED(hr))
 		{
-			if (m_pLongExposureInfraredPixels && pLongExposureInfraredBuffer && (nLongExposureInfraredWidth == cLongExposureInfraredWidth) && (nLongExposureInfraredHeight == cLongExposureInfraredHeight))
+			if (m_pLongExposureInfraredPixels && pLongExposureInfraredBuffer)
 			{
 				char* pDest = m_pLongExposureInfraredPixels;
 
 				// end pixel is start + width*height - 1
-				const UINT16* pLongExposureInfraredBufferEnd = pLongExposureInfraredBuffer + (nLongExposureInfraredWidth * nLongExposureInfraredHeight);
+				const UINT16* pLongExposureInfraredBufferEnd = pLongExposureInfraredBuffer + (cLongExposureInfraredWidth * cLongExposureInfraredHeight);
 
 				while (pLongExposureInfraredBuffer < pLongExposureInfraredBufferEnd)
 				{
@@ -636,8 +657,6 @@ void DepthReaderThreadLoop(void *arg)
 
 		IDepthFrame* pDepthFrame = NULL;
 		IFrameDescription* pDepthFrameDescription = NULL;
-		int nDepthWidth = 0;
-		int nDepthHeight = 0;
 		UINT nDepthBufferSize = 0;
 		UINT16 *pDepthBuffer = NULL;
 		USHORT nDepthMinReliableDistance = 0;
@@ -651,13 +670,19 @@ void DepthReaderThreadLoop(void *arg)
 		{
 			hr = pDepthFrame->get_FrameDescription(&pDepthFrameDescription);
 		}
-		if (SUCCEEDED(hr))
+if (SUCCEEDED(hr))
 		{
-			hr = pDepthFrameDescription->get_Width(&nDepthWidth);
+			hr = pDepthFrameDescription->get_HorizontalFieldOfView(&m_fDepthHorizontalFieldOfView);
 		}
+
 		if (SUCCEEDED(hr))
 		{
-			hr = pDepthFrameDescription->get_Height(&nDepthHeight);
+			hr = pDepthFrameDescription->get_VerticalFieldOfView(&m_fDepthVerticalFieldOfView);
+		}
+
+		if (SUCCEEDED(hr))
+		{
+			hr = pDepthFrameDescription->get_DiagonalFieldOfView(&m_fDepthDiagonalFieldOfView);
 		}
 		if (SUCCEEDED(hr))
 		{
@@ -675,12 +700,12 @@ void DepthReaderThreadLoop(void *arg)
 		if (SUCCEEDED(hr))
 		{
 			mapDepthToByte = nDepthMaxDistance / 256;
-			if (m_pDepthPixels && pDepthBuffer && (nDepthWidth == cDepthWidth) && (nDepthHeight == cDepthHeight))
+			if (m_pDepthPixels && pDepthBuffer)
 			{
 				char* pDepthPixel = m_pDepthPixels;
 
 				// end pixel is start + width*height - 1
-				const UINT16* pDepthBufferEnd = pDepthBuffer + (nDepthWidth * nDepthHeight);
+				const UINT16* pDepthBufferEnd = pDepthBuffer + (cDepthWidth * cDepthHeight);
 
 				while (pDepthBuffer < pDepthBufferEnd)
 				{
@@ -1058,6 +1083,12 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 
 			v8::Local<v8::Object> v8ColorResult = Nan::New<v8::Object>();
 			Nan::Set(v8ColorResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8ColorPixels);
+
+			//field of view
+			Nan::Set(v8ColorResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorHorizontalFieldOfView));
+			Nan::Set(v8ColorResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorVerticalFieldOfView));
+			Nan::Set(v8ColorResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorDiagonalFieldOfView));
+
 			Nan::Set(v8Result, Nan::New<v8::String>("color").ToLocalChecked(), v8ColorResult);
 		}
 
@@ -1070,6 +1101,12 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 
 			v8::Local<v8::Object> v8DepthResult = Nan::New<v8::Object>();
 			Nan::Set(v8DepthResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8DepthPixels);
+
+			//field of view
+			Nan::Set(v8DepthResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthHorizontalFieldOfView));
+			Nan::Set(v8DepthResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthVerticalFieldOfView));
+			Nan::Set(v8DepthResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthDiagonalFieldOfView));
+
 			Nan::Set(v8Result, Nan::New<v8::String>("depth").ToLocalChecked(), v8DepthResult);
 		}
 
@@ -1105,6 +1142,11 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 			}
 			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("bodies").ToLocalChecked(), v8bodies);
 
+			//field of view pf color camera
+			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorHorizontalFieldOfView));
+			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorVerticalFieldOfView));
+			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorDiagonalFieldOfView));
+
 			Nan::Set(v8Result, Nan::New<v8::String>("bodyIndexColor").ToLocalChecked(), v8BodyIndexColorResult);
 		}
 
@@ -1139,8 +1181,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 			IColorFrameReference* pColorFrameReference = NULL;
 			IColorFrame* pColorFrame = NULL;
 			IFrameDescription* pColorFrameDescription = NULL;
-			int nColorWidth = 0;
-			int nColorHeight = 0;
 			ColorImageFormat colorImageFormat = ColorImageFormat_None;
 			UINT nColorBufferSize = 0;
 			RGBQUAD *pColorBuffer = NULL;
@@ -1154,8 +1194,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 			IDepthFrameReference* pDepthFrameReference = NULL;
 			IDepthFrame* pDepthFrame = NULL;
 			IFrameDescription* pDepthFrameDescription = NULL;
-			int nDepthWidth = 0;
-			int nDepthHeight = 0;
 			UINT nDepthBufferSize = 0;
 			UINT16 *pDepthBuffer = NULL;
 			USHORT nDepthMinReliableDistance = 0;
@@ -1165,8 +1203,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 			IBodyIndexFrameReference* pBodyIndexFrameReference = NULL;
 			IBodyIndexFrame* pBodyIndexFrame = NULL;
 			IFrameDescription* pBodyIndexFrameDescription = NULL;
-			int nBodyIndexWidth = 0;
-			int nBodyIndexHeight = 0;
 			UINT nBodyIndexBufferSize = 0;
 			BYTE *pBodyIndexBuffer = NULL;
 			for(int i = 0; i < BODY_COUNT; i++)
@@ -1192,12 +1228,17 @@ void MultiSourceReaderThreadLoop(void *arg)
 
 				if (SUCCEEDED(hr))
 				{
-					hr = pColorFrameDescription->get_Width(&nColorWidth);
+					hr = pColorFrameDescription->get_HorizontalFieldOfView(&m_fColorHorizontalFieldOfView);
 				}
 
 				if (SUCCEEDED(hr))
 				{
-					hr = pColorFrameDescription->get_Height(&nColorHeight);
+					hr = pColorFrameDescription->get_VerticalFieldOfView(&m_fColorVerticalFieldOfView);
+				}
+
+				if (SUCCEEDED(hr))
+				{
+					hr = pColorFrameDescription->get_DiagonalFieldOfView(&m_fColorDiagonalFieldOfView);
 				}
 
 				if (SUCCEEDED(hr))
@@ -1252,11 +1293,17 @@ void MultiSourceReaderThreadLoop(void *arg)
 				}
 				if (SUCCEEDED(hr))
 				{
-					hr = pDepthFrameDescription->get_Width(&nDepthWidth);
+					hr = pDepthFrameDescription->get_HorizontalFieldOfView(&m_fDepthHorizontalFieldOfView);
 				}
+
 				if (SUCCEEDED(hr))
 				{
-					hr = pDepthFrameDescription->get_Height(&nDepthHeight);
+					hr = pDepthFrameDescription->get_VerticalFieldOfView(&m_fDepthVerticalFieldOfView);
+				}
+
+				if (SUCCEEDED(hr))
+				{
+					hr = pDepthFrameDescription->get_DiagonalFieldOfView(&m_fDepthDiagonalFieldOfView);
 				}
 				if (SUCCEEDED(hr))
 				{
@@ -1281,14 +1328,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 				if (SUCCEEDED(hr))
 				{
 					hr = pBodyIndexFrame->get_FrameDescription(&pBodyIndexFrameDescription);
-				}
-				if (SUCCEEDED(hr))
-				{
-					hr = pBodyIndexFrameDescription->get_Width(&nBodyIndexWidth);
-				}
-				if (SUCCEEDED(hr))
-				{
-					hr = pBodyIndexFrameDescription->get_Height(&nBodyIndexHeight);
 				}
 				if (SUCCEEDED(hr))
 				{
@@ -1332,7 +1371,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 				//we could have color and / or bodyindexcolor
 				if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
 				{
-					hr = m_pCoordinateMapper->MapColorFrameToDepthSpace(nDepthWidth * nDepthHeight, (UINT16*)pDepthBuffer, nColorWidth * nColorHeight, m_pDepthCoordinatesForColor);
+					hr = m_pCoordinateMapper->MapColorFrameToDepthSpace(cDepthWidth * cDepthHeight, (UINT16*)pDepthBuffer, cColorWidth * cColorHeight, m_pDepthCoordinatesForColor);
 					if (SUCCEEDED(hr))
 					{
 						//default transparent colors
@@ -1340,7 +1379,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 							memset(m_jsBodyFrame.bodies[i].colorPixels, 0, cColorWidth * cColorHeight * sizeof(RGBQUAD));
 						}
 
-						for (int colorIndex = 0; colorIndex < (nColorWidth*nColorHeight); ++colorIndex)
+						for (int colorIndex = 0; colorIndex < (cColorWidth*cColorHeight); ++colorIndex)
 						{
 
 							DepthSpacePoint p = m_pDepthCoordinatesForColor[colorIndex];
@@ -1351,9 +1390,9 @@ void MultiSourceReaderThreadLoop(void *arg)
 							{
 								int depthX = static_cast<int>(p.X + 0.5f);
 								int depthY = static_cast<int>(p.Y + 0.5f);
-								if ((depthX >= 0 && depthX < nDepthWidth) && (depthY >= 0 && depthY < nDepthHeight))
+								if ((depthX >= 0 && depthX < cDepthWidth) && (depthY >= 0 && depthY < cDepthHeight))
 								{
-									BYTE player = pBodyIndexBuffer[depthX + (depthY * nDepthWidth)];
+									BYTE player = pBodyIndexBuffer[depthX + (depthY * cDepthWidth)];
 
 									// if we're tracking a player for the current pixel, draw from the color camera
 									if (player != 0xff)
@@ -1380,12 +1419,12 @@ void MultiSourceReaderThreadLoop(void *arg)
 				if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
 				{
 					mapDepthToByte = nDepthMaxDistance / 256;
-					if (m_pDepthPixels && pDepthBuffer && (nDepthWidth == cDepthWidth) && (nDepthHeight == cDepthHeight))
+					if (m_pDepthPixels && pDepthBuffer)
 					{
 						char* pDepthPixel = m_pDepthPixels;
 
 						// end pixel is start + width*height - 1
-						const UINT16* pDepthBufferEnd = pDepthBuffer + (nDepthWidth * nDepthHeight);
+						const UINT16* pDepthBufferEnd = pDepthBuffer + (cDepthWidth * cDepthHeight);
 
 						while (pDepthBuffer < pDepthBufferEnd)
 						{
