@@ -7,14 +7,14 @@
 
 using namespace v8;
 
-IKinectSensor*											m_pKinectSensor;
-ICoordinateMapper*									m_pCoordinateMapper;
-IColorFrameReader*  								m_pColorFrameReader;
-IInfraredFrameReader* 							m_pInfraredFrameReader;
-ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader;
-IDepthFrameReader*									m_pDepthFrameReader;
-IBodyFrameReader*										m_pBodyFrameReader;
-IMultiSourceFrameReader*						m_pMultiSourceFrameReader;
+IKinectSensor*											m_pKinectSensor = NULL;
+ICoordinateMapper*									m_pCoordinateMapper = NULL;
+IColorFrameReader*  								m_pColorFrameReader = NULL;
+IInfraredFrameReader* 							m_pInfraredFrameReader = NULL;
+ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader = NULL;
+IDepthFrameReader*									m_pDepthFrameReader = NULL;
+IBodyFrameReader*										m_pBodyFrameReader = NULL;
+IMultiSourceFrameReader*						m_pMultiSourceFrameReader = NULL;
 
 RGBQUAD*								m_pColorPixels = new RGBQUAD[cColorWidth * cColorHeight];
 char*										m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
@@ -125,6 +125,14 @@ NAN_METHOD(CloseFunction)
 	uv_mutex_lock(&m_mDepthReaderMutex);
 	uv_mutex_lock(&m_mBodyReaderMutex);
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
+
+	//stop thread bools
+	m_bColorThreadRunning = false;
+	m_bInfraredThreadRunning = false;
+	m_bLongExposureInfraredThreadRunning = false;
+	m_bDepthThreadRunning = false;
+	m_bBodyThreadRunning = false;
+	m_bMultiSourceThreadRunning = false;
 
 	//release instances
 	SafeRelease(m_pColorFrameReader);

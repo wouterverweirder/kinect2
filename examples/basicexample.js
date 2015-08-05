@@ -19,6 +19,7 @@ if(kinect.open()) {
 
 	//close the kinect after 5 seconds
 	setTimeout(function(){
+		kinect.removeAllListeners('bodyFrame');
 		kinect.close();
 		console.log("Kinect Closed");
 	}, 5000);
