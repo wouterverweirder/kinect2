@@ -116,31 +116,29 @@ NAN_METHOD(OpenFunction)
 	info.GetReturnValue().Set(true);
 }
 
+template<class Interface>
+void stopReader(uv_mutex_t* mutex, bool* threadCondition, uv_thread_t* thread, uv_handle_t* async, Interface* pInterfaceToRelease)
+{
+	uv_mutex_lock(mutex);
+	bool wasRunning = *threadCondition;
+	*threadCondition = false;
+	uv_mutex_unlock(mutex);
+	if(wasRunning)
+	{
+		uv_thread_join(thread);
+		uv_close(async, NULL);
+	}
+	SafeRelease(pInterfaceToRelease);
+}
+
 NAN_METHOD(CloseFunction)
 {
-	//mutex locking
-	uv_mutex_lock(&m_mColorReaderMutex);
-	uv_mutex_lock(&m_mInfraredReaderMutex);
-	uv_mutex_lock(&m_mLongExposureInfraredReaderMutex);
-	uv_mutex_lock(&m_mDepthReaderMutex);
-	uv_mutex_lock(&m_mBodyReaderMutex);
-	uv_mutex_lock(&m_mMultiSourceReaderMutex);
-
-	//stop thread bools
-	m_bColorThreadRunning = false;
-	m_bInfraredThreadRunning = false;
-	m_bLongExposureInfraredThreadRunning = false;
-	m_bDepthThreadRunning = false;
-	m_bBodyThreadRunning = false;
-	m_bMultiSourceThreadRunning = false;
-
-	//release instances
-	SafeRelease(m_pColorFrameReader);
-	SafeRelease(m_pInfraredFrameReader);
-	SafeRelease(m_pLongExposureInfraredFrameReader);
-	SafeRelease(m_pDepthFrameReader);
-	SafeRelease(m_pBodyFrameReader);
-	SafeRelease(m_pMultiSourceFrameReader);
+	stopReader(&m_mColorReaderMutex, &m_bColorThreadRunning, &m_tColorThread, (uv_handle_t*) &m_aColorAsync, m_pColorFrameReader);
+	stopReader(&m_mInfraredReaderMutex, &m_bInfraredThreadRunning, &m_tInfraredThread, (uv_handle_t*) &m_aInfraredAsync, m_pInfraredFrameReader);
+	stopReader(&m_mLongExposureInfraredReaderMutex, &m_bLongExposureInfraredThreadRunning, &m_tLongExposureInfraredThread, (uv_handle_t*) &m_aLongExposureInfraredAsync, m_pLongExposureInfraredFrameReader);
+	stopReader(&m_mDepthReaderMutex, &m_bDepthThreadRunning, &m_tDepthThread, (uv_handle_t*) &m_aDepthAsync, m_pDepthFrameReader);
+	stopReader(&m_mBodyReaderMutex, &m_bBodyThreadRunning, &m_tBodyThread, (uv_handle_t*) &m_aBodyAsync, m_pBodyFrameReader);
+	stopReader(&m_mMultiSourceReaderMutex, &m_bMultiSourceThreadRunning, &m_tMultiSourceThread, (uv_handle_t*) &m_aMultiSourceAsync, m_pMultiSourceFrameReader);
 
 	// done with coordinate mapper
 	SafeRelease(m_pCoordinateMapper);
@@ -152,14 +150,6 @@ NAN_METHOD(CloseFunction)
 	}
 
 	SafeRelease(m_pKinectSensor);
-
-	//unlock mutexes
-	uv_mutex_unlock(&m_mColorReaderMutex);
-	uv_mutex_unlock(&m_mInfraredReaderMutex);
-	uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
-	uv_mutex_unlock(&m_mDepthReaderMutex);
-	uv_mutex_unlock(&m_mBodyReaderMutex);
-	uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 
 	info.GetReturnValue().Set(true);
 }
@@ -284,6 +274,7 @@ NAN_METHOD(OpenColorReaderFunction)
 	if (SUCCEEDED(hr))
 	{
 		m_bColorThreadRunning = true;
+		uv_async_init(uv_default_loop(), &m_aColorAsync, ColorProgress_);
 		uv_thread_create(&m_tColorThread, ColorReaderThreadLoop, NULL);
 	}
 
@@ -302,11 +293,7 @@ NAN_METHOD(OpenColorReaderFunction)
 
 NAN_METHOD(CloseColorReaderFunction)
 {
-	uv_mutex_lock(&m_mColorReaderMutex);
-	m_bColorThreadRunning = false;
-	SafeRelease(m_pColorFrameReader);
-	uv_mutex_unlock(&m_mColorReaderMutex);
-
+	stopReader(&m_mColorReaderMutex, &m_bColorThreadRunning, &m_tColorThread, (uv_handle_t*) &m_aColorAsync, m_pColorFrameReader);
 	info.GetReturnValue().Set(true);
 }
 
@@ -445,6 +432,7 @@ NAN_METHOD(OpenInfraredReaderFunction)
 	if (SUCCEEDED(hr))
 	{
 		m_bInfraredThreadRunning = true;
+		uv_async_init(uv_default_loop(), &m_aInfraredAsync, InfraredProgress_);
 		uv_thread_create(&m_tInfraredThread, InfraredReaderThreadLoop, NULL);
 	}
 
@@ -463,12 +451,7 @@ NAN_METHOD(OpenInfraredReaderFunction)
 
 NAN_METHOD(CloseInfraredReaderFunction)
 {
-
-	uv_mutex_lock(&m_mInfraredReaderMutex);
-	m_bInfraredThreadRunning = false;
-	SafeRelease(m_pInfraredFrameReader);
-	uv_mutex_unlock(&m_mInfraredReaderMutex);
-
+	stopReader(&m_mInfraredReaderMutex, &m_bInfraredThreadRunning, &m_tInfraredThread, (uv_handle_t*) &m_aInfraredAsync, m_pInfraredFrameReader);
 	info.GetReturnValue().Set(true);
 }
 
@@ -606,6 +589,7 @@ NAN_METHOD(OpenLongExposureInfraredReaderFunction)
 	if (SUCCEEDED(hr))
 	{
 		m_bLongExposureInfraredThreadRunning = true;
+		uv_async_init(uv_default_loop(), &m_aLongExposureInfraredAsync, LongExposureInfraredProgress_);
 		uv_thread_create(&m_tLongExposureInfraredThread, LongExposureInfraredReaderThreadLoop, NULL);
 	}
 
@@ -624,12 +608,7 @@ NAN_METHOD(OpenLongExposureInfraredReaderFunction)
 
 NAN_METHOD(CloseLongExposureInfraredReaderFunction)
 {
-
-	uv_mutex_lock(&m_mLongExposureInfraredReaderMutex);
-	m_bLongExposureInfraredThreadRunning = false;
-	SafeRelease(m_pLongExposureInfraredFrameReader);
-	uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
-
+	stopReader(&m_mLongExposureInfraredReaderMutex, &m_bLongExposureInfraredThreadRunning, &m_tLongExposureInfraredThread, (uv_handle_t*) &m_aLongExposureInfraredAsync, m_pLongExposureInfraredFrameReader);
 	info.GetReturnValue().Set(true);
 }
 
@@ -762,6 +741,7 @@ NAN_METHOD(OpenDepthReaderFunction)
 	if (SUCCEEDED(hr))
 	{
 		m_bDepthThreadRunning = true;
+		uv_async_init(uv_default_loop(), &m_aDepthAsync, DepthProgress_);
 		uv_thread_create(&m_tDepthThread, DepthReaderThreadLoop, NULL);
 	}
 
@@ -780,12 +760,7 @@ NAN_METHOD(OpenDepthReaderFunction)
 
 NAN_METHOD(CloseDepthReaderFunction)
 {
-
-	uv_mutex_lock(&m_mDepthReaderMutex);
-	m_bDepthThreadRunning = false;
-	SafeRelease(m_pDepthFrameReader);
-	uv_mutex_unlock(&m_mDepthReaderMutex);
-
+	stopReader(&m_mDepthReaderMutex, &m_bDepthThreadRunning, &m_tDepthThread, (uv_handle_t*) &m_aDepthAsync, m_pDepthFrameReader);
 	info.GetReturnValue().Set(true);
 }
 
@@ -1045,6 +1020,7 @@ NAN_METHOD(OpenBodyReaderFunction)
 	if (SUCCEEDED(hr))
 	{
 		m_bBodyThreadRunning = true;
+		uv_async_init(uv_default_loop(), &m_aBodyAsync, BodyProgress_);
 		uv_thread_create(&m_tBodyThread, BodyReaderThreadLoop, NULL);
 	}
 
@@ -1063,12 +1039,7 @@ NAN_METHOD(OpenBodyReaderFunction)
 
 NAN_METHOD(CloseBodyReaderFunction)
 {
-
-	uv_mutex_lock(&m_mBodyReaderMutex);
-	m_bBodyThreadRunning = false;
-	SafeRelease(m_pBodyFrameReader);
-	uv_mutex_unlock(&m_mBodyReaderMutex);
-
+	stopReader(&m_mBodyReaderMutex, &m_bBodyThreadRunning, &m_tBodyThread, (uv_handle_t*) &m_aBodyAsync, m_pBodyFrameReader);
 	info.GetReturnValue().Set(true);
 }
 
@@ -1681,6 +1652,7 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 	if (SUCCEEDED(hr))
 	{
 		m_bMultiSourceThreadRunning = true;
+		uv_async_init(uv_default_loop(), &m_aMultiSourceAsync, MultiSourceProgress_);
 		uv_thread_create(&m_tMultiSourceThread, MultiSourceReaderThreadLoop, NULL);
 	}
 
@@ -1697,12 +1669,7 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 
 NAN_METHOD(CloseMultiSourceReaderFunction)
 {
-
-	uv_mutex_lock(&m_mMultiSourceReaderMutex);
-	m_bMultiSourceThreadRunning = false;
-	SafeRelease(m_pMultiSourceFrameReader);
-	uv_mutex_unlock(&m_mMultiSourceReaderMutex);
-
+	stopReader(&m_mMultiSourceReaderMutex, &m_bMultiSourceThreadRunning, &m_tMultiSourceThread, (uv_handle_t*) &m_aMultiSourceAsync, m_pMultiSourceFrameReader);
 	info.GetReturnValue().Set(true);
 }
 
@@ -1735,40 +1702,32 @@ NAN_METHOD(TrackPixelsForBodyIndicesFunction)
 
 NAN_MODULE_INIT(Init)
 {
-
 	//color
 	uv_mutex_init(&m_mColorReaderMutex);
-	uv_async_init(uv_default_loop(), &m_aColorAsync, ColorProgress_);
 	m_persistentColorPixels.Reset<v8::Object>(Nan::CopyBuffer((char *)m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
 
 	//infrared
 	uv_mutex_init(&m_mInfraredReaderMutex);
-	uv_async_init(uv_default_loop(), &m_aInfraredAsync, InfraredProgress_);
 	m_persistentInfraredPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pInfraredPixels, cInfraredWidth * cInfraredHeight).ToLocalChecked());
 
 	//long exposure infrared
 	uv_mutex_init(&m_mLongExposureInfraredReaderMutex);
-	uv_async_init(uv_default_loop(), &m_aLongExposureInfraredAsync, LongExposureInfraredProgress_);
 	m_persistentLongExposureInfraredPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight).ToLocalChecked());
 
 	//depth
 	uv_mutex_init(&m_mDepthReaderMutex);
-	uv_async_init(uv_default_loop(), &m_aDepthAsync, DepthProgress_);
 	m_persistentDepthPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pDepthPixels, cDepthWidth * cDepthHeight).ToLocalChecked());
 
 	//body
 	uv_mutex_init(&m_mBodyReaderMutex);
-	uv_async_init(uv_default_loop(), &m_aBodyAsync, BodyProgress_);
 
 	//multisource
 	uv_mutex_init(&m_mMultiSourceReaderMutex);
-	uv_async_init(uv_default_loop(), &m_aMultiSourceAsync, MultiSourceProgress_);
 	v8::Local<v8::Object> v8BodyIndexColorPixels = Nan::New<v8::Object>();
 	for(int i = 0; i < BODY_COUNT; i++)
 	{
 		Nan::Set(v8BodyIndexColorPixels, i, Nan::CopyBuffer((char *)m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
 	}
-	m_persistentBodyIndexColorPixels.Reset<v8::Object>(v8BodyIndexColorPixels);
 
 	Nan::Set(target, Nan::New<String>("open").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(OpenFunction)->GetFunction());
