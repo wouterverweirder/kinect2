@@ -1675,7 +1675,6 @@ NAN_METHOD(CloseMultiSourceReaderFunction)
 
 NAN_METHOD(TrackPixelsForBodyIndicesFunction)
 {
-
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
 	int i;
 	for(i = 0; i < BODY_COUNT; i++)
@@ -1696,7 +1695,6 @@ NAN_METHOD(TrackPixelsForBodyIndicesFunction)
 	}
 
 	uv_mutex_unlock(&m_mMultiSourceReaderMutex);
-
 	info.GetReturnValue().Set(true);
 }
 
@@ -1728,6 +1726,7 @@ NAN_MODULE_INIT(Init)
 	{
 		Nan::Set(v8BodyIndexColorPixels, i, Nan::CopyBuffer((char *)m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
 	}
+	m_persistentBodyIndexColorPixels.Reset<v8::Object>(v8BodyIndexColorPixels);
 
 	Nan::Set(target, Nan::New<String>("open").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(OpenFunction)->GetFunction());
