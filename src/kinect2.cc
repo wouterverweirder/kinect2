@@ -1664,7 +1664,7 @@ NAN_MODULE_INIT(Init)
 	Nan::Set(target, Nan::New<String>("openMultiSourceReader").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(OpenMultiSourceReaderFunction)->GetFunction());
 	Nan::Set(target, Nan::New<String>("closeMultiSourceReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
+		Nan::New<FunctionTemplate>(CloseMultiSourceReaderFunction)->GetFunction());
 	Nan::Set(target, Nan::New<String>("trackPixelsForBodyIndices").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(TrackPixelsForBodyIndicesFunction)->GetFunction());
 }
