@@ -1418,20 +1418,21 @@ void MultiSourceReaderThreadLoop(void *arg)
 		{
 			//we have everything ready for our main loop, lock the mutex & copy the data to global memory
 			uv_mutex_lock(&m_mMultiSourceReaderMutex);
+			//field of views are also included in body index pixel frames, so always set them
+			m_fColorHorizontalFieldOfViewV8 = m_fColorHorizontalFieldOfView;
+			m_fColorVerticalFieldOfViewV8 = m_fColorVerticalFieldOfView;
+			m_fColorDiagonalFieldOfViewV8 = m_fColorDiagonalFieldOfView;
+			m_fDepthHorizontalFieldOfViewV8 = m_fDepthHorizontalFieldOfView;
+			m_fDepthVerticalFieldOfViewV8 = m_fDepthVerticalFieldOfView;
+			m_fDepthDiagonalFieldOfViewV8 = m_fDepthDiagonalFieldOfView;
 			if(NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes)
 			{
-				m_fColorHorizontalFieldOfViewV8 = m_fColorHorizontalFieldOfView;
-				m_fColorVerticalFieldOfViewV8 = m_fColorVerticalFieldOfView;
-				m_fColorDiagonalFieldOfViewV8 = m_fColorDiagonalFieldOfView;
 				//copy into buffer for V8
 				memcpy(m_pColorPixelsV8, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
 			}
 			//depth image
 			if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
 			{
-				m_fDepthHorizontalFieldOfViewV8 = m_fDepthHorizontalFieldOfView;
-				m_fDepthVerticalFieldOfViewV8 = m_fDepthVerticalFieldOfView;
-				m_fDepthDiagonalFieldOfViewV8 = m_fDepthDiagonalFieldOfView;
 				//copy into buffer for V8
 				memcpy(m_pDepthPixelsV8, m_pDepthPixels, cDepthWidth * cDepthHeight);
 			}

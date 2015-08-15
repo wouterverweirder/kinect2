@@ -1,6 +1,6 @@
 {
   "name": "kinect2",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "Nodejs library to access the kinect 2 data from the official MS SDK",
   "main": "./lib/kinect2.js",
   "scripts": {
