@@ -10,22 +10,10 @@
 	hiddenCanvas.setAttribute('width', 1920);
 	hiddenCanvas.setAttribute('height', 1080);
 
-	var ImageBufferRendererWebgl = require('./js/image-buffer-renderer-webgl.js');
+	var ImageBufferRendererWebgl = require('../shared/js/image-buffer-renderer-webgl.js');
 	var colorRenderer = new ImageBufferRendererWebgl(hiddenCanvas);
 	var trackedBodyIndex = -1;
 	var emptyPixels = new Uint8Array(1920 * 1080 * 4);
-
-	function processImageData(imageBuffer, width, height) {
-
-		if (colorRenderer.isProcessing || (width <= 0) || (height <= 0)) {
-			return;
-		}
-
-		colorRenderer.isProcessing = true;
-		colorRenderer.processImageData(imageBuffer, width, height);
-		colorRenderer.isProcessing = false;
-
-	}
 
 	function getClosestBodyIndex(bodies) {
 		var closestZ = Number.MAX_VALUE;
@@ -66,8 +54,7 @@
 					kinect.trackPixelsForBodyIndices([closestBodyIndex]);
 				} else {
 					kinect.trackPixelsForBodyIndices(false);
-					//clear canvas
-					processImageData(emptyPixels.buffer, colorCanvas.width, colorCanvas.height);
+					colorRenderer.processImageData(imageBuffer, hiddenCanvas.width, hiddenCanvas.height);
 				}
 			}
 			else {
@@ -116,8 +103,7 @@
 						//do minus the space on the left size of the spine
 						var spaceLeft = frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.spineMid].colorX - leftJoint.colorX;
 						dstRect.x -= (spaceLeft * hiddenCanvas.width * scale);
-						//processImageData(frame.color.buffer, hiddenCanvas.width, hiddenCanvas.height);
-						processImageData(frame.bodyIndexColor.bodies[closestBodyIndex].buffer, hiddenCanvas.width, hiddenCanvas.height);
+						colorRenderer.processImageData(frame.bodyIndexColor.bodies[closestBodyIndex].buffer, hiddenCanvas.width, hiddenCanvas.height);
 						colorCtx.clearRect(0, 0, colorCanvas.width, colorCanvas.height);
 						colorCtx.drawImage(hiddenCanvas, srcRect.x, srcRect.y, srcRect.width, srcRect.height, dstRect.x, dstRect.y, dstRect.width, dstRect.height);
 					}
