@@ -25,6 +25,8 @@ char*										m_pLongExposureInfraredPixelsV8 = new char[cLongExposureInfraredW
 char*										m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
 char*										m_pDepthPixelsV8 = new char[cDepthWidth * cDepthHeight];
 
+bool 										m_trackPixelsForBodyIndexV8[BODY_COUNT];
+
 RGBQUAD									m_pBodyIndexColorPixels[BODY_COUNT][cColorWidth * cColorHeight];
 RGBQUAD									m_pBodyIndexColorPixelsV8[BODY_COUNT][cColorWidth * cColorHeight];
 
@@ -1135,9 +1137,9 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 			Nan::Set(v8ColorResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8ColorPixels);
 
 			//field of view
-			Nan::Set(v8ColorResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorHorizontalFieldOfView));
-			Nan::Set(v8ColorResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorVerticalFieldOfView));
-			Nan::Set(v8ColorResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorDiagonalFieldOfView));
+			Nan::Set(v8ColorResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorHorizontalFieldOfViewV8));
+			Nan::Set(v8ColorResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorVerticalFieldOfViewV8));
+			Nan::Set(v8ColorResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorDiagonalFieldOfViewV8));
 
 			Nan::Set(v8Result, Nan::New<v8::String>("color").ToLocalChecked(), v8ColorResult);
 		}
@@ -1151,9 +1153,9 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 			Nan::Set(v8DepthResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8DepthPixels);
 
 			//field of view
-			Nan::Set(v8DepthResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthHorizontalFieldOfView));
-			Nan::Set(v8DepthResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthVerticalFieldOfView));
-			Nan::Set(v8DepthResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthDiagonalFieldOfView));
+			Nan::Set(v8DepthResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthHorizontalFieldOfViewV8));
+			Nan::Set(v8DepthResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthVerticalFieldOfViewV8));
+			Nan::Set(v8DepthResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthDiagonalFieldOfViewV8));
 
 			Nan::Set(v8Result, Nan::New<v8::String>("depth").ToLocalChecked(), v8DepthResult);
 		}
@@ -1177,8 +1179,7 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 			{
 				v8::Local<v8::Object> v8body = Nan::New<v8::Object>();
 				Nan::Set(v8body, Nan::New<v8::String>("bodyIndex").ToLocalChecked(), Nan::New<v8::Number>(i));
-				//something weird is going on: every x frames hasPixels is false, but body is still tracked?
-				if(m_jsBodyFrameV8.bodies[i].trackPixels && m_jsBodyFrameV8.bodies[i].hasPixels) {
+				if(m_jsBodyFrameV8.bodies[i].hasPixels && m_trackPixelsForBodyIndexV8[i]) {
 					//reuse the existing buffer
 					v8::Local<v8::Value> v8ColorPixels = v8BodyIndexColorPixels->Get(i);
 					Nan::Set(v8body, Nan::New<v8::String>("buffer").ToLocalChecked(), v8ColorPixels);
@@ -1188,9 +1189,9 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("bodies").ToLocalChecked(), v8bodies);
 
 			//field of view pf color camera
-			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorHorizontalFieldOfView));
-			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorVerticalFieldOfView));
-			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorDiagonalFieldOfView));
+			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorHorizontalFieldOfViewV8));
+			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorVerticalFieldOfViewV8));
+			Nan::Set(v8BodyIndexColorResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fColorDiagonalFieldOfViewV8));
 
 			Nan::Set(v8Result, Nan::New<v8::String>("bodyIndexColor").ToLocalChecked(), v8BodyIndexColorResult);
 		}
@@ -1562,7 +1563,7 @@ NAN_METHOD(TrackPixelsForBodyIndicesFunction)
 	int i;
 	for(i = 0; i < BODY_COUNT; i++)
 	{
-		m_jsBodyFrame.bodies[i].trackPixels = false;
+		m_trackPixelsForBodyIndexV8[i] = false;
 	}
 	Local<Object> jsOptions = info[0].As<Object>();
 	if(jsOptions->IsArray())
@@ -1573,7 +1574,7 @@ NAN_METHOD(TrackPixelsForBodyIndicesFunction)
 		{
 			uint32_t index = static_cast<uint32_t>(jsBodyIndices->Get(i).As<Number>()->Value());
 			index = min(index, BODY_COUNT - 1);
-			m_jsBodyFrame.bodies[index].trackPixels = true;
+			m_trackPixelsForBodyIndexV8[index] = true;
 		}
 	}
 

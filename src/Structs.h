@@ -29,7 +29,6 @@ typedef struct _JSBody
 {
 	bool tracked;
 	bool hasPixels;
-	bool trackPixels;
 	UINT64 trackingId;
 	char leftHandState;
 	char rightHandState;
