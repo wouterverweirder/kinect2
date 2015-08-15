@@ -1273,7 +1273,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 			IBodyFrameReference* pBodyFrameReference = NULL;
 			IBodyFrame* pBodyFrame = NULL;
 
-			if(FrameSourceTypes::FrameSourceTypes_Color & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Color & m_enabledFrameSourceTypes)
 			{
 				hr = pMultiSourceFrame->get_ColorFrameReference(&pColorFrameReference);
 				if (SUCCEEDED(hr))
@@ -1285,7 +1285,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 					hr = processColorFrameData(pColorFrame);
 				}
 			}
-			if(FrameSourceTypes::FrameSourceTypes_Infrared & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Infrared & m_enabledFrameSourceTypes)
 			{
 				hr = pMultiSourceFrame->get_InfraredFrameReference(&pInfraredFrameReference);
 				if (SUCCEEDED(hr))
@@ -1297,7 +1297,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 					hr = processInfraredFrameData(pInfraredFrame);
 				}
 			}
-			if(FrameSourceTypes::FrameSourceTypes_LongExposureInfrared & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_LongExposureInfrared & m_enabledFrameSourceTypes)
 			{
 				hr = pMultiSourceFrame->get_LongExposureInfraredFrameReference(&pLongExposureInfraredFrameReference);
 				if (SUCCEEDED(hr))
@@ -1309,7 +1309,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 					hr = processLongExposureInfraredFrameData(pLongExposureInfraredFrame);
 				}
 			}
-			if(FrameSourceTypes::FrameSourceTypes_Depth & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Depth & m_enabledFrameSourceTypes)
 			{
 				hr = pMultiSourceFrame->get_DepthFrameReference(&pDepthFrameReference);
 				if (SUCCEEDED(hr))
@@ -1325,7 +1325,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 					hr = pDepthFrame->AccessUnderlyingBuffer(&nDepthBufferSize, &pDepthBuffer);
 				}
 			}
-			if(FrameSourceTypes::FrameSourceTypes_BodyIndex & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_BodyIndex & m_enabledFrameSourceTypes)
 			{
 				hr = pMultiSourceFrame->get_BodyIndexFrameReference(&pBodyIndexFrameReference);
 				if (SUCCEEDED(hr))
@@ -1341,7 +1341,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 					hr = pBodyIndexFrame->AccessUnderlyingBuffer(&nBodyIndexBufferSize, &pBodyIndexBuffer);
 				}
 			}
-			if(FrameSourceTypes::FrameSourceTypes_Body & m_enabledFrameSourceTypes)
+			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Body & m_enabledFrameSourceTypes)
 			{
 				hr = pMultiSourceFrame->get_BodyFrameReference(&pBodyFrameReference);
 				if (SUCCEEDED(hr))
@@ -1376,7 +1376,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 			{
 				//what are we doing with the color data?
 				//we could have color and / or bodyindexcolor
-				if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
+				if(SUCCEEDED(hr) && NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
 				{
 					hr = m_pCoordinateMapper->MapColorFrameToDepthSpace(cDepthWidth * cDepthHeight, (UINT16*)pDepthBuffer, cColorWidth * cColorHeight, m_pDepthCoordinatesForColor);
 					if (SUCCEEDED(hr))
