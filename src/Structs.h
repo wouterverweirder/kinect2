@@ -12,7 +12,6 @@ typedef struct _JSJoint
 	float cameraX;
 	float cameraY;
 	float cameraZ;
-	USHORT rawDepth;
 	//
 	bool hasFloorData;
 	float floorDepthX;
@@ -35,10 +34,6 @@ typedef struct _JSBody
 	char leftHandState;
 	char rightHandState;
 	JSJoint joints[JointType_Count];
-	RGBQUAD colorPixels[cColorWidth * cColorHeight];
-	char depthPixels[cDepthWidth * cDepthHeight];
-	char infraredPixels[cInfraredWidth * cInfraredHeight];
-	char longExposureInfraredPixels[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
 } JSBody;
 
 typedef struct _JSBodyFrame

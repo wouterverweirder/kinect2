@@ -17,10 +17,19 @@ IBodyFrameReader*										m_pBodyFrameReader = NULL;
 IMultiSourceFrameReader*						m_pMultiSourceFrameReader = NULL;
 
 RGBQUAD*								m_pColorPixels = new RGBQUAD[cColorWidth * cColorHeight];
+RGBQUAD*								m_pColorPixelsV8 = new RGBQUAD[cColorWidth * cColorHeight];
 char*										m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
+char*										m_pInfraredPixelsV8 = new char[cInfraredWidth * cInfraredHeight];
 char*										m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
+char*										m_pLongExposureInfraredPixelsV8 = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
 char*										m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
+char*										m_pDepthPixelsV8 = new char[cDepthWidth * cDepthHeight];
+
+RGBQUAD									m_pBodyIndexColorPixels[BODY_COUNT][cColorWidth * cColorHeight];
+RGBQUAD									m_pBodyIndexColorPixelsV8[BODY_COUNT][cColorWidth * cColorHeight];
+
 JSBodyFrame							m_jsBodyFrame;
+JSBodyFrame							m_jsBodyFrameV8;
 
 DepthSpacePoint*				m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
 
@@ -51,6 +60,9 @@ Nan::Persistent<Object>	m_persistentColorPixels;
 float 									m_fColorHorizontalFieldOfView;
 float 									m_fColorVerticalFieldOfView;
 float 									m_fColorDiagonalFieldOfView;
+float 									m_fColorHorizontalFieldOfViewV8;
+float 									m_fColorVerticalFieldOfViewV8;
+float 									m_fColorDiagonalFieldOfViewV8;
 
 uv_async_t							m_aInfraredAsync;
 uv_thread_t							m_tInfraredThread;
@@ -59,6 +71,9 @@ Nan::Persistent<Object>	m_persistentInfraredPixels;
 float 									m_fInfraredHorizontalFieldOfView;
 float 									m_fInfraredVerticalFieldOfView;
 float 									m_fInfraredDiagonalFieldOfView;
+float 									m_fInfraredHorizontalFieldOfViewV8;
+float 									m_fInfraredVerticalFieldOfViewV8;
+float 									m_fInfraredDiagonalFieldOfViewV8;
 
 uv_async_t							m_aLongExposureInfraredAsync;
 uv_thread_t							m_tLongExposureInfraredThread;
@@ -67,6 +82,9 @@ Nan::Persistent<Object>	m_persistentLongExposureInfraredPixels;
 float 									m_fLongExposureInfraredHorizontalFieldOfView;
 float 									m_fLongExposureInfraredVerticalFieldOfView;
 float 									m_fLongExposureInfraredDiagonalFieldOfView;
+float 									m_fLongExposureInfraredHorizontalFieldOfViewV8;
+float 									m_fLongExposureInfraredVerticalFieldOfViewV8;
+float 									m_fLongExposureInfraredDiagonalFieldOfViewV8;
 
 uv_async_t							m_aDepthAsync;
 uv_thread_t							m_tDepthThread;
@@ -75,6 +93,9 @@ Nan::Persistent<Object> m_persistentDepthPixels;
 float 									m_fDepthHorizontalFieldOfView;
 float 									m_fDepthVerticalFieldOfView;
 float 									m_fDepthDiagonalFieldOfView;
+float 									m_fDepthHorizontalFieldOfViewV8;
+float 									m_fDepthVerticalFieldOfViewV8;
+float 									m_fDepthDiagonalFieldOfViewV8;
 
 uv_async_t							m_aBodyAsync;
 uv_thread_t							m_tBodyThread;
@@ -159,11 +180,8 @@ NAUV_WORK_CB(ColorProgress_) {
 	uv_mutex_lock(&m_mColorReaderMutex);
 	if(m_pColorReaderCallback != NULL)
 	{
-		//reuse the existing buffer
+		//reuse the existing buffer - data is already in there
 		v8::Local<v8::Object> v8ColorPixels = Nan::New(m_persistentColorPixels);
-		char* data = node::Buffer::Data(v8ColorPixels);
-		memcpy(data, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
-
 		Local<Value> argv[] = {
 			v8ColorPixels
 		};
@@ -172,82 +190,97 @@ NAUV_WORK_CB(ColorProgress_) {
 	uv_mutex_unlock(&m_mColorReaderMutex);
 }
 
+HRESULT processColorFrameData(IColorFrame* pColorFrame)
+{
+	HRESULT hr;
+	IFrameDescription* pColorFrameDescription = NULL;
+	ColorImageFormat imageFormat = ColorImageFormat_None;
+	UINT nColorBufferSize = 0;
+	RGBQUAD *pColorBuffer = NULL;
+
+	hr = pColorFrame->get_FrameDescription(&pColorFrameDescription);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pColorFrameDescription->get_HorizontalFieldOfView(&m_fColorHorizontalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pColorFrameDescription->get_VerticalFieldOfView(&m_fColorVerticalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pColorFrameDescription->get_DiagonalFieldOfView(&m_fColorDiagonalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pColorFrame->get_RawColorImageFormat(&imageFormat);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		if (imageFormat == ColorImageFormat_Rgba)
+		{
+			hr = pColorFrame->AccessRawUnderlyingBuffer(&nColorBufferSize, reinterpret_cast<BYTE**>(&pColorBuffer));
+			if(SUCCEEDED(hr))
+			{
+				memcpy(m_pColorPixels, pColorBuffer, cColorWidth * cColorHeight * sizeof(RGBQUAD));
+			}
+		}
+		else if (m_pColorPixels)
+		{
+			pColorBuffer = m_pColorPixels;
+			nColorBufferSize = cColorWidth * cColorHeight * sizeof(RGBQUAD);
+			hr = pColorFrame->CopyConvertedFrameDataToArray(nColorBufferSize, reinterpret_cast<BYTE*>(pColorBuffer), ColorImageFormat_Rgba);
+		}
+		else
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	SafeRelease(pColorFrameDescription);
+	return hr;
+}
+
 void ColorReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		uv_mutex_lock(&m_mColorReaderMutex);
 		if(!m_bColorThreadRunning)
 		{
-			//make sure to unlock the mutex
-			uv_mutex_unlock(&m_mColorReaderMutex);
 			break;
 		}
 
 		IColorFrame* pColorFrame = NULL;
-		IFrameDescription* pColorFrameDescription = NULL;
-		ColorImageFormat imageFormat = ColorImageFormat_None;
-		UINT nColorBufferSize = 0;
-		RGBQUAD *pColorBuffer = NULL;
-
 		HRESULT hr;
 
 		hr = m_pColorFrameReader->AcquireLatestFrame(&pColorFrame);
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pColorFrame->get_FrameDescription(&pColorFrameDescription);
-		}
+			processColorFrameData(pColorFrame);
 
-		if (SUCCEEDED(hr))
-		{
-			hr = pColorFrameDescription->get_HorizontalFieldOfView(&m_fColorHorizontalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pColorFrameDescription->get_VerticalFieldOfView(&m_fColorVerticalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pColorFrameDescription->get_DiagonalFieldOfView(&m_fColorDiagonalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pColorFrame->get_RawColorImageFormat(&imageFormat);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			if (imageFormat == ColorImageFormat_Rgba)
+			if (SUCCEEDED(hr))
 			{
-				hr = pColorFrame->AccessRawUnderlyingBuffer(&nColorBufferSize, reinterpret_cast<BYTE**>(&pColorBuffer));
-				if (SUCCEEDED(hr))
-				{
-					memcpy(m_pColorPixels, pColorBuffer, cColorWidth * cColorHeight * sizeof(RGBQUAD));
-				}
+				//we have everything ready for our main loop, lock the mutex & copy the data to global memory
+				uv_mutex_lock(&m_mColorReaderMutex);
+				m_fColorHorizontalFieldOfViewV8 = m_fColorHorizontalFieldOfView;
+				m_fColorVerticalFieldOfViewV8 = m_fColorVerticalFieldOfView;
+				m_fColorDiagonalFieldOfViewV8 = m_fColorDiagonalFieldOfView;
+				//copy into buffer for V8
+				memcpy(m_pColorPixelsV8, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
+				//unlock the mutex again
+				uv_mutex_unlock(&m_mColorReaderMutex);
+				//notify event loop
+				uv_async_send(&m_aColorAsync);
 			}
-			else if (m_pColorPixels)
-			{
-				pColorBuffer = m_pColorPixels;
-				nColorBufferSize = cColorWidth * cColorHeight * sizeof(RGBQUAD);
-				hr = pColorFrame->CopyConvertedFrameDataToArray(nColorBufferSize, reinterpret_cast<BYTE*>(pColorBuffer), ColorImageFormat_Rgba);
-			}
-			else
-			{
-				hr = E_FAIL;
-			}
+
 		}
-		if (SUCCEEDED(hr))
-		{
-			//notify event loop
-			uv_async_send(&m_aColorAsync);
-		}
-		SafeRelease(pColorFrameDescription);
 		SafeRelease(pColorFrame);
-		uv_mutex_unlock(&m_mColorReaderMutex);
 	}
 }
 
@@ -305,9 +338,6 @@ NAUV_WORK_CB(InfraredProgress_)
 	{
 		//reuse the existing buffer
 		v8::Local<v8::Object> v8InfraredPixels = Nan::New(m_persistentInfraredPixels);
-		char* data = node::Buffer::Data(v8InfraredPixels);
-		memcpy(data, m_pInfraredPixels, cInfraredWidth * cInfraredHeight);
-
 		Local<Value> argv[] = {
 			v8InfraredPixels
 		};
@@ -316,95 +346,108 @@ NAUV_WORK_CB(InfraredProgress_)
 	uv_mutex_unlock(&m_mInfraredReaderMutex);
 }
 
+HRESULT processInfraredFrameData(IInfraredFrame* pInfraredFrame)
+{
+	HRESULT hr;
+	IFrameDescription* pInfraredFrameDescription = NULL;
+	UINT nInfraredBufferSize = 0;
+	UINT16 *pInfraredBuffer = NULL;
+
+	hr = pInfraredFrame->get_FrameDescription(&pInfraredFrameDescription);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pInfraredFrameDescription->get_HorizontalFieldOfView(&m_fInfraredHorizontalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pInfraredFrameDescription->get_VerticalFieldOfView(&m_fInfraredVerticalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pInfraredFrameDescription->get_DiagonalFieldOfView(&m_fInfraredDiagonalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pInfraredFrame->AccessUnderlyingBuffer(&nInfraredBufferSize, &pInfraredBuffer);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		if (m_pInfraredPixels && pInfraredBuffer)
+		{
+			char* pDest = m_pInfraredPixels;
+
+			// end pixel is start + width*height - 1
+			const UINT16* pInfraredBufferEnd = pInfraredBuffer + (cInfraredWidth * cInfraredHeight);
+
+			while (pInfraredBuffer < pInfraredBufferEnd)
+			{
+				// normalize the incoming infrared data (ushort) to a float ranging from
+				// [InfraredOutputValueMinimum, InfraredOutputValueMaximum] by
+				// 1. dividing the incoming value by the source maximum value
+				float intensityRatio = static_cast<float>(*pInfraredBuffer) / InfraredSourceValueMaximum;
+
+				// 2. dividing by the (average scene value * standard deviations)
+				intensityRatio /= InfraredSceneValueAverage * InfraredSceneStandardDeviations;
+
+				// 3. limiting the value to InfraredOutputValueMaximum
+				intensityRatio = min(InfraredOutputValueMaximum, intensityRatio);
+
+				// 4. limiting the lower value InfraredOutputValueMinimym
+				intensityRatio = max(InfraredOutputValueMinimum, intensityRatio);
+
+				// 5. converting the normalized value to a byte and using the result
+				// as the RGB components required by the image
+				byte intensity = static_cast<byte>(intensityRatio * 255.0f);
+				*pDest = intensity;
+
+				++pDest;
+				++pInfraredBuffer;
+			}
+		}
+	}
+	SafeRelease(pInfraredFrameDescription);
+	return hr;
+}
+
 void InfraredReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		uv_mutex_lock(&m_mInfraredReaderMutex);
 		if(!m_bInfraredThreadRunning)
 		{
-			//make sure to unlock the mutex
-			uv_mutex_unlock(&m_mInfraredReaderMutex);
 			break;
 		}
 
 		IInfraredFrame* pInfraredFrame = NULL;
-		IFrameDescription* pInfraredFrameDescription = NULL;
-		UINT nInfraredBufferSize = 0;
-		UINT16 *pInfraredBuffer = NULL;
-
 		HRESULT hr;
 
 		hr = m_pInfraredFrameReader->AcquireLatestFrame(&pInfraredFrame);
 
-		if (SUCCEEDED(hr))
+		if(SUCCEEDED(hr))
 		{
-			hr = pInfraredFrame->get_FrameDescription(&pInfraredFrameDescription);
-		}
+			hr = processInfraredFrameData(pInfraredFrame);
 
-		if (SUCCEEDED(hr))
-		{
-			hr = pInfraredFrameDescription->get_HorizontalFieldOfView(&m_fInfraredHorizontalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pInfraredFrameDescription->get_VerticalFieldOfView(&m_fInfraredVerticalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pInfraredFrameDescription->get_DiagonalFieldOfView(&m_fInfraredDiagonalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pInfraredFrame->AccessUnderlyingBuffer(&nInfraredBufferSize, &pInfraredBuffer);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			if (m_pInfraredPixels && pInfraredBuffer)
+			if (SUCCEEDED(hr))
 			{
-				char* pDest = m_pInfraredPixels;
-
-				// end pixel is start + width*height - 1
-				const UINT16* pInfraredBufferEnd = pInfraredBuffer + (cInfraredWidth * cInfraredHeight);
-
-				while (pInfraredBuffer < pInfraredBufferEnd)
-				{
-					// normalize the incoming infrared data (ushort) to a float ranging from
-					// [InfraredOutputValueMinimum, InfraredOutputValueMaximum] by
-					// 1. dividing the incoming value by the source maximum value
-					float intensityRatio = static_cast<float>(*pInfraredBuffer) / InfraredSourceValueMaximum;
-
-					// 2. dividing by the (average scene value * standard deviations)
-					intensityRatio /= InfraredSceneValueAverage * InfraredSceneStandardDeviations;
-
-					// 3. limiting the value to InfraredOutputValueMaximum
-					intensityRatio = min(InfraredOutputValueMaximum, intensityRatio);
-
-					// 4. limiting the lower value InfraredOutputValueMinimym
-					intensityRatio = max(InfraredOutputValueMinimum, intensityRatio);
-
-					// 5. converting the normalized value to a byte and using the result
-					// as the RGB components required by the image
-					byte intensity = static_cast<byte>(intensityRatio * 255.0f);
-					*pDest = intensity;
-
-					++pDest;
-					++pInfraredBuffer;
-				}
+				//we have everything ready for our main loop, lock the mutex & copy the data to global memory
+				uv_mutex_lock(&m_mInfraredReaderMutex);
+				m_fInfraredHorizontalFieldOfViewV8 = m_fInfraredHorizontalFieldOfView;
+				m_fInfraredVerticalFieldOfViewV8 = m_fInfraredVerticalFieldOfView;
+				m_fInfraredDiagonalFieldOfViewV8 = m_fInfraredDiagonalFieldOfView;
+				//copy into buffer for V8
+				memcpy(m_pInfraredPixelsV8, m_pInfraredPixels, cInfraredWidth * cInfraredHeight);
+				//unlock the mutex again
+				uv_mutex_unlock(&m_mInfraredReaderMutex);
+				//notify event loop
+				uv_async_send(&m_aInfraredAsync);
 			}
 		}
-		if (SUCCEEDED(hr))
-		{
-			//notify event loop
-			uv_async_send(&m_aInfraredAsync);
-		}
-		SafeRelease(pInfraredFrameDescription);
 		SafeRelease(pInfraredFrame);
-		uv_mutex_unlock(&m_mInfraredReaderMutex);
 	}
 }
 
@@ -462,9 +505,6 @@ NAUV_WORK_CB(LongExposureInfraredProgress_) {
 	{
 		//reuse the existing buffer
 		v8::Local<v8::Object> v8LongExposureInfraredPixels = Nan::New(m_persistentLongExposureInfraredPixels);
-		char* data = node::Buffer::Data(v8LongExposureInfraredPixels);
-		memcpy(data, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight);
-
 		Local<Value> argv[] = {
 			v8LongExposureInfraredPixels
 		};
@@ -473,95 +513,109 @@ NAUV_WORK_CB(LongExposureInfraredProgress_) {
 	uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
 }
 
+HRESULT processLongExposureInfraredFrameData(ILongExposureInfraredFrame* pLongExposureInfraredFrame)
+{
+	HRESULT hr;
+	IFrameDescription* pLongExposureInfraredFrameDescription = NULL;
+	UINT nLongExposureInfraredBufferSize = 0;
+	UINT16 *pLongExposureInfraredBuffer = NULL;
+
+	hr = pLongExposureInfraredFrame->get_FrameDescription(&pLongExposureInfraredFrameDescription);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pLongExposureInfraredFrameDescription->get_HorizontalFieldOfView(&m_fLongExposureInfraredHorizontalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pLongExposureInfraredFrameDescription->get_VerticalFieldOfView(&m_fLongExposureInfraredVerticalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pLongExposureInfraredFrameDescription->get_DiagonalFieldOfView(&m_fLongExposureInfraredDiagonalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pLongExposureInfraredFrame->AccessUnderlyingBuffer(&nLongExposureInfraredBufferSize, &pLongExposureInfraredBuffer);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		if (m_pLongExposureInfraredPixels && pLongExposureInfraredBuffer)
+		{
+			char* pDest = m_pLongExposureInfraredPixels;
+
+			// end pixel is start + width*height - 1
+			const UINT16* pLongExposureInfraredBufferEnd = pLongExposureInfraredBuffer + (cLongExposureInfraredWidth * cLongExposureInfraredHeight);
+
+			while (pLongExposureInfraredBuffer < pLongExposureInfraredBufferEnd)
+			{
+				// normalize the incoming infrared data (ushort) to a float ranging from
+				// [InfraredOutputValueMinimum, InfraredOutputValueMaximum] by
+				// 1. dividing the incoming value by the source maximum value
+				float intensityRatio = static_cast<float>(*pLongExposureInfraredBuffer) / InfraredSourceValueMaximum;
+
+				// 2. dividing by the (average scene value * standard deviations)
+				intensityRatio /= InfraredSceneValueAverage * InfraredSceneStandardDeviations;
+
+				// 3. limiting the value to InfraredOutputValueMaximum
+				intensityRatio = min(InfraredOutputValueMaximum, intensityRatio);
+
+				// 4. limiting the lower value InfraredOutputValueMinimym
+				intensityRatio = max(InfraredOutputValueMinimum, intensityRatio);
+
+				// 5. converting the normalized value to a byte and using the result
+				// as the RGB components required by the image
+				byte intensity = static_cast<byte>(intensityRatio * 255.0f);
+				*pDest = intensity;
+
+				++pDest;
+				++pLongExposureInfraredBuffer;
+			}
+		}
+	}
+
+	SafeRelease(pLongExposureInfraredFrameDescription);
+	return hr;
+}
+
 void LongExposureInfraredReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		uv_mutex_lock(&m_mLongExposureInfraredReaderMutex);
 		if(!m_bLongExposureInfraredThreadRunning)
 		{
-			//make sure to unlock the mutex
-			uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
 			break;
 		}
 
 		ILongExposureInfraredFrame* pLongExposureInfraredFrame = NULL;
-		IFrameDescription* pLongExposureInfraredFrameDescription = NULL;
-		UINT nLongExposureInfraredBufferSize = 0;
-		UINT16 *pLongExposureInfraredBuffer = NULL;
-
 		HRESULT hr;
 
 		hr = m_pLongExposureInfraredFrameReader->AcquireLatestFrame(&pLongExposureInfraredFrame);
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pLongExposureInfraredFrame->get_FrameDescription(&pLongExposureInfraredFrameDescription);
-		}
+			hr = processLongExposureInfraredFrameData(pLongExposureInfraredFrame);
 
-		if (SUCCEEDED(hr))
-		{
-			hr = pLongExposureInfraredFrameDescription->get_HorizontalFieldOfView(&m_fLongExposureInfraredHorizontalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pLongExposureInfraredFrameDescription->get_VerticalFieldOfView(&m_fLongExposureInfraredVerticalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pLongExposureInfraredFrameDescription->get_DiagonalFieldOfView(&m_fLongExposureInfraredDiagonalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pLongExposureInfraredFrame->AccessUnderlyingBuffer(&nLongExposureInfraredBufferSize, &pLongExposureInfraredBuffer);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			if (m_pLongExposureInfraredPixels && pLongExposureInfraredBuffer)
+			if (SUCCEEDED(hr))
 			{
-				char* pDest = m_pLongExposureInfraredPixels;
-
-				// end pixel is start + width*height - 1
-				const UINT16* pLongExposureInfraredBufferEnd = pLongExposureInfraredBuffer + (cLongExposureInfraredWidth * cLongExposureInfraredHeight);
-
-				while (pLongExposureInfraredBuffer < pLongExposureInfraredBufferEnd)
-				{
-					// normalize the incoming infrared data (ushort) to a float ranging from
-					// [InfraredOutputValueMinimum, InfraredOutputValueMaximum] by
-					// 1. dividing the incoming value by the source maximum value
-					float intensityRatio = static_cast<float>(*pLongExposureInfraredBuffer) / InfraredSourceValueMaximum;
-
-					// 2. dividing by the (average scene value * standard deviations)
-					intensityRatio /= InfraredSceneValueAverage * InfraredSceneStandardDeviations;
-
-					// 3. limiting the value to InfraredOutputValueMaximum
-					intensityRatio = min(InfraredOutputValueMaximum, intensityRatio);
-
-					// 4. limiting the lower value InfraredOutputValueMinimym
-					intensityRatio = max(InfraredOutputValueMinimum, intensityRatio);
-
-					// 5. converting the normalized value to a byte and using the result
-					// as the RGB components required by the image
-					byte intensity = static_cast<byte>(intensityRatio * 255.0f);
-					*pDest = intensity;
-
-					++pDest;
-					++pLongExposureInfraredBuffer;
-				}
+				//we have everything ready for our main loop, lock the mutex & copy the data to global memory
+				uv_mutex_lock(&m_mLongExposureInfraredReaderMutex);
+				m_fLongExposureInfraredHorizontalFieldOfViewV8 = m_fLongExposureInfraredHorizontalFieldOfView;
+				m_fLongExposureInfraredVerticalFieldOfViewV8 = m_fLongExposureInfraredVerticalFieldOfView;
+				m_fLongExposureInfraredDiagonalFieldOfViewV8 = m_fLongExposureInfraredDiagonalFieldOfView;
+				//copy into buffer for V8
+				memcpy(m_pLongExposureInfraredPixelsV8, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight);
+				//unlock the mutex again
+				uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
+				//notify event loop
+				uv_async_send(&m_aLongExposureInfraredAsync);
 			}
 		}
-		if (SUCCEEDED(hr))
-		{
-			//notify event loop
-			uv_async_send(&m_aLongExposureInfraredAsync);
-		}
-		SafeRelease(pLongExposureInfraredFrameDescription);
 		SafeRelease(pLongExposureInfraredFrame);
-		uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
 	}
 }
 
@@ -619,9 +673,6 @@ NAUV_WORK_CB(DepthProgress_) {
 	{
 		//reuse the existing buffer
 		v8::Local<v8::Object> v8DepthPixels = Nan::New(m_persistentDepthPixels);
-		char* data = node::Buffer::Data(v8DepthPixels);
-		memcpy(data, m_pDepthPixels, cDepthWidth * cDepthHeight);
-
 		Local<Value> argv[] = {
 			v8DepthPixels
 		};
@@ -630,90 +681,105 @@ NAUV_WORK_CB(DepthProgress_) {
 	uv_mutex_unlock(&m_mDepthReaderMutex);
 }
 
+HRESULT processDepthFrameData(IDepthFrame* pDepthFrame)
+{
+	HRESULT hr;
+	IFrameDescription* pDepthFrameDescription = NULL;
+	UINT nDepthBufferSize = 0;
+	UINT16 *pDepthBuffer = NULL;
+	USHORT nDepthMinReliableDistance = 0;
+	USHORT nDepthMaxDistance = 0;
+	int mapDepthToByte = 8000 / 256;
+
+	hr = pDepthFrame->get_FrameDescription(&pDepthFrameDescription);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrameDescription->get_HorizontalFieldOfView(&m_fDepthHorizontalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrameDescription->get_VerticalFieldOfView(&m_fDepthVerticalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrameDescription->get_DiagonalFieldOfView(&m_fDepthDiagonalFieldOfView);
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrame->get_DepthMinReliableDistance(&nDepthMinReliableDistance);
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrame->get_DepthMaxReliableDistance(&nDepthMaxDistance);
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrame->AccessUnderlyingBuffer(&nDepthBufferSize, &pDepthBuffer);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		mapDepthToByte = nDepthMaxDistance / 256;
+		if (m_pDepthPixels && pDepthBuffer)
+		{
+			char* pDepthPixel = m_pDepthPixels;
+
+			// end pixel is start + width*height - 1
+			const UINT16* pDepthBufferEnd = pDepthBuffer + (cDepthWidth * cDepthHeight);
+
+			while (pDepthBuffer < pDepthBufferEnd)
+			{
+				USHORT depth = *pDepthBuffer;
+
+				BYTE intensity = static_cast<BYTE>(depth >= nDepthMinReliableDistance && depth <= nDepthMaxDistance ? (depth / mapDepthToByte) : 0);
+				*pDepthPixel = intensity;
+
+				++pDepthPixel;
+				++pDepthBuffer;
+			}
+		}
+	}
+
+	SafeRelease(pDepthFrameDescription);
+	return hr;
+}
+
 void DepthReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		uv_mutex_lock(&m_mDepthReaderMutex);
 		if(!m_bDepthThreadRunning)
 		{
-			//make sure to unlock the mutex
-			uv_mutex_unlock(&m_mDepthReaderMutex);
 			break;
 		}
 
 		IDepthFrame* pDepthFrame = NULL;
-		IFrameDescription* pDepthFrameDescription = NULL;
-		UINT nDepthBufferSize = 0;
-		UINT16 *pDepthBuffer = NULL;
-		USHORT nDepthMinReliableDistance = 0;
-		USHORT nDepthMaxDistance = 0;
-		int mapDepthToByte = 8000 / 256;
-
 		HRESULT hr;
 
 		hr = m_pDepthFrameReader->AcquireLatestFrame(&pDepthFrame);
 		if (SUCCEEDED(hr))
 		{
-			hr = pDepthFrame->get_FrameDescription(&pDepthFrameDescription);
-		}
-if (SUCCEEDED(hr))
-		{
-			hr = pDepthFrameDescription->get_HorizontalFieldOfView(&m_fDepthHorizontalFieldOfView);
-		}
+			hr = processDepthFrameData(pDepthFrame);
 
-		if (SUCCEEDED(hr))
-		{
-			hr = pDepthFrameDescription->get_VerticalFieldOfView(&m_fDepthVerticalFieldOfView);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			hr = pDepthFrameDescription->get_DiagonalFieldOfView(&m_fDepthDiagonalFieldOfView);
-		}
-		if (SUCCEEDED(hr))
-		{
-			hr = pDepthFrame->get_DepthMinReliableDistance(&nDepthMinReliableDistance);
-		}
-		if (SUCCEEDED(hr))
-		{
-			hr = pDepthFrame->get_DepthMaxReliableDistance(&nDepthMaxDistance);
-		}
-		if (SUCCEEDED(hr))
-		{
-			hr = pDepthFrame->AccessUnderlyingBuffer(&nDepthBufferSize, &pDepthBuffer);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			mapDepthToByte = nDepthMaxDistance / 256;
-			if (m_pDepthPixels && pDepthBuffer)
+			if (SUCCEEDED(hr))
 			{
-				char* pDepthPixel = m_pDepthPixels;
-
-				// end pixel is start + width*height - 1
-				const UINT16* pDepthBufferEnd = pDepthBuffer + (cDepthWidth * cDepthHeight);
-
-				while (pDepthBuffer < pDepthBufferEnd)
-				{
-					USHORT depth = *pDepthBuffer;
-
-					BYTE intensity = static_cast<BYTE>(depth >= nDepthMinReliableDistance && depth <= nDepthMaxDistance ? (depth / mapDepthToByte) : 0);
-					*pDepthPixel = intensity;
-
-					++pDepthPixel;
-					++pDepthBuffer;
-				}
+				//we have everything ready for our main loop, lock the mutex & copy the data to global memory
+				uv_mutex_lock(&m_mDepthReaderMutex);
+				m_fDepthHorizontalFieldOfViewV8 = m_fDepthHorizontalFieldOfView;
+				m_fDepthVerticalFieldOfViewV8 = m_fDepthVerticalFieldOfView;
+				m_fDepthDiagonalFieldOfViewV8 = m_fDepthDiagonalFieldOfView;
+				//copy into buffer for V8
+				memcpy(m_pDepthPixelsV8, m_pDepthPixels, cDepthWidth * cDepthHeight);
+				//unlock the mutex again
+				uv_mutex_unlock(&m_mDepthReaderMutex);
+				//notify event loop
+				uv_async_send(&m_aDepthAsync);
 			}
 		}
-		if (SUCCEEDED(hr))
-		{
-			//notify event loop
-			uv_async_send(&m_aDepthAsync);
-		}
-		SafeRelease(pDepthFrameDescription);
 		SafeRelease(pDepthFrame);
-		uv_mutex_unlock(&m_mDepthReaderMutex);
 	}
 }
 
@@ -777,37 +843,37 @@ v8::Local<v8::Object> getV8BodyFrame_()
 		v8::Local<v8::Object> v8body = Nan::New<v8::Object>();
 
 		Nan::Set(v8body, Nan::New<String>("bodyIndex").ToLocalChecked(), Nan::New<v8::Number>(i));
-		Nan::Set(v8body, Nan::New<v8::String>("tracked").ToLocalChecked(), Nan::New<v8::Boolean>(m_jsBodyFrame.bodies[i].tracked));
-		if(m_jsBodyFrame.bodies[i].tracked)
+		Nan::Set(v8body, Nan::New<v8::String>("tracked").ToLocalChecked(), Nan::New<v8::Boolean>(m_jsBodyFrameV8.bodies[i].tracked));
+		if(m_jsBodyFrameV8.bodies[i].tracked)
 		{
-			Nan::Set(v8body, Nan::New<v8::String>("trackingId").ToLocalChecked(), Nan::New<v8::Number>(static_cast<double>(m_jsBodyFrame.bodies[i].trackingId)));
+			Nan::Set(v8body, Nan::New<v8::String>("trackingId").ToLocalChecked(), Nan::New<v8::Number>(static_cast<double>(m_jsBodyFrameV8.bodies[i].trackingId)));
 			//hand states
-			Nan::Set(v8body, Nan::New<v8::String>("leftHandState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].leftHandState));
-			Nan::Set(v8body, Nan::New<v8::String>("rightHandState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].rightHandState));
+			Nan::Set(v8body, Nan::New<v8::String>("leftHandState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].leftHandState));
+			Nan::Set(v8body, Nan::New<v8::String>("rightHandState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].rightHandState));
 			v8::Local<v8::Array> v8joints = Nan::New<v8::Array>();
 			//joints
-			for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
+			for (int j = 0; j < _countof(m_jsBodyFrameV8.bodies[i].joints); ++j)
 			{
 				v8::Local<v8::Object> v8joint = Nan::New<v8::Object>();
-				Nan::Set(v8joint, Nan::New<v8::String>("depthX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthX));
-				Nan::Set(v8joint, Nan::New<v8::String>("depthY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].depthY));
-				Nan::Set(v8joint, Nan::New<v8::String>("colorX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorX));
-				Nan::Set(v8joint, Nan::New<v8::String>("colorY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].colorY));
-				Nan::Set(v8joint, Nan::New<v8::String>("cameraX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraX));
-				Nan::Set(v8joint, Nan::New<v8::String>("cameraY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraY));
-				Nan::Set(v8joint, Nan::New<v8::String>("cameraZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].cameraZ));
+				Nan::Set(v8joint, Nan::New<v8::String>("depthX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].depthX));
+				Nan::Set(v8joint, Nan::New<v8::String>("depthY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].depthY));
+				Nan::Set(v8joint, Nan::New<v8::String>("colorX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].colorX));
+				Nan::Set(v8joint, Nan::New<v8::String>("colorY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].colorY));
+				Nan::Set(v8joint, Nan::New<v8::String>("cameraX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].cameraX));
+				Nan::Set(v8joint, Nan::New<v8::String>("cameraY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].cameraY));
+				Nan::Set(v8joint, Nan::New<v8::String>("cameraZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].cameraZ));
 				//body ground
-				if(m_jsBodyFrame.bodies[i].joints[j].hasFloorData)
+				if(m_jsBodyFrameV8.bodies[i].joints[j].hasFloorData)
 				{
-					Nan::Set(v8joint, Nan::New<v8::String>("floorDepthX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorDepthX));
-					Nan::Set(v8joint, Nan::New<v8::String>("floorDepthY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorDepthY));
-					Nan::Set(v8joint, Nan::New<v8::String>("floorColorX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorColorX));
-					Nan::Set(v8joint, Nan::New<v8::String>("floorColorY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorColorY));
-					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraX));
-					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraY));
-					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].floorCameraZ));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorDepthX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorDepthX));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorDepthY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorDepthY));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorColorX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorColorX));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorColorY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorColorY));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorCameraX));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorCameraY));
+					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorCameraZ));
 				}
-				Nan::Set(v8joints, Nan::New<v8::Number>(m_jsBodyFrame.bodies[i].joints[j].jointType), v8joint);
+				Nan::Set(v8joints, Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].jointType), v8joint);
 			}
 			Nan::Set(v8body, Nan::New<v8::String>("joints").ToLocalChecked(), v8joints);
 		}
@@ -816,12 +882,12 @@ v8::Local<v8::Object> getV8BodyFrame_()
 	Nan::Set(v8BodyResult, Nan::New<v8::String>("bodies").ToLocalChecked(), v8bodies);
 
 	//floor plane
-	if(m_jsBodyFrame.hasFloorClipPlane) {
+	if(m_jsBodyFrameV8.hasFloorClipPlane) {
 		v8::Local<v8::Object> v8FloorClipPlane = Nan::New<v8::Object>();
-		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("x").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.floorClipPlaneX));
-		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("y").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.floorClipPlaneY));
-		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("z").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.floorClipPlaneZ));
-		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("w").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrame.floorClipPlaneW));
+		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("x").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.floorClipPlaneX));
+		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("y").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.floorClipPlaneY));
+		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("z").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.floorClipPlaneZ));
+		Nan::Set(v8FloorClipPlane, Nan::New<v8::String>("w").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.floorClipPlaneW));
 		Nan::Set(v8BodyResult, Nan::New<v8::String>("floorClipPlane").ToLocalChecked(), v8FloorClipPlane);
 	}
 
@@ -856,143 +922,152 @@ NAUV_WORK_CB(BodyProgress_)
 	uv_mutex_unlock(&m_mBodyReaderMutex);
 }
 
+HRESULT processBodyFrameData(IBodyFrame* pBodyFrame)
+{
+	IBody* ppBodies[BODY_COUNT] = {0};
+	HRESULT hr, hr2;
+	hr = pBodyFrame->GetAndRefreshBodyData(_countof(ppBodies), ppBodies);
+	if (SUCCEEDED(hr))
+	{
+		DepthSpacePoint depthPoint = {0};
+		ColorSpacePoint colorPoint = {0};
+		Vector4 floorClipPlane = {0};
+		//floor clip plane
+		m_jsBodyFrame.hasFloorClipPlane = false;
+		hr2 = pBodyFrame->get_FloorClipPlane(&floorClipPlane);
+		if(SUCCEEDED(hr2))
+		{
+			m_jsBodyFrame.hasFloorClipPlane = true;
+			m_jsBodyFrame.floorClipPlaneX = floorClipPlane.x;
+			m_jsBodyFrame.floorClipPlaneY = floorClipPlane.y;
+			m_jsBodyFrame.floorClipPlaneZ = floorClipPlane.z;
+			m_jsBodyFrame.floorClipPlaneW = floorClipPlane.w;
+			//camera angle
+			calculateCameraAngle_(floorClipPlane, &m_jsBodyFrame.cameraAngle, &m_jsBodyFrame.cosCameraAngle, &m_jsBodyFrame.sinCameraAngle);
+		}
+		for (int i = 0; i < _countof(ppBodies); ++i)
+		{
+			IBody* pBody = ppBodies[i];
+			if (pBody)
+			{
+				BOOLEAN bTracked = false;
+				hr = pBody->get_IsTracked(&bTracked);
+				m_jsBodyFrame.bodies[i].tracked = bTracked;
+
+				if(bTracked)
+				{
+					UINT64 iTrackingId = 0;
+					hr = pBody->get_TrackingId(&iTrackingId);
+					m_jsBodyFrame.bodies[i].trackingId = iTrackingId;
+					//hand state
+					HandState leftHandState = HandState_Unknown;
+					HandState rightHandState = HandState_Unknown;
+					pBody->get_HandLeftState(&leftHandState);
+					pBody->get_HandRightState(&rightHandState);
+					m_jsBodyFrame.bodies[i].leftHandState = leftHandState;
+					m_jsBodyFrame.bodies[i].rightHandState = rightHandState;
+					//go through the joints
+					Joint joints[JointType_Count];
+					hr = pBody->GetJoints(_countof(joints), joints);
+					if (SUCCEEDED(hr))
+					{
+						for (int j = 0; j < _countof(joints); ++j)
+						{
+							m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
+							m_pCoordinateMapper->MapCameraPointToColorSpace(joints[j].Position, &colorPoint);
+
+							m_jsBodyFrame.bodies[i].joints[j].depthX = depthPoint.X / cDepthWidth;
+							m_jsBodyFrame.bodies[i].joints[j].depthY = depthPoint.Y / cDepthHeight;
+
+							m_jsBodyFrame.bodies[i].joints[j].colorX = colorPoint.X / cColorWidth;
+							m_jsBodyFrame.bodies[i].joints[j].colorY = colorPoint.Y / cColorHeight;
+
+							m_jsBodyFrame.bodies[i].joints[j].cameraX = joints[j].Position.X;
+							m_jsBodyFrame.bodies[i].joints[j].cameraY = joints[j].Position.Y;
+							m_jsBodyFrame.bodies[i].joints[j].cameraZ = joints[j].Position.Z;
+
+							m_jsBodyFrame.bodies[i].joints[j].jointType = joints[j].JointType;
+						}
+						//calculate body ground position
+						if(m_includeJointFloorData && m_jsBodyFrame.hasFloorClipPlane)
+						{
+							for (int j = 0; j < _countof(joints); ++j)
+							{
+								m_jsBodyFrame.bodies[i].joints[j].hasFloorData = true;
+								//distance of joint to floor
+								float distance = getJointDistanceFromFloor_(floorClipPlane, joints[j], m_jsBodyFrame.cameraAngle, m_jsBodyFrame.cosCameraAngle, m_jsBodyFrame.sinCameraAngle);
+								CameraSpacePoint p;
+								p.X = joints[j].Position.X;
+								p.Y = joints[j].Position.Y - distance;
+								p.Z = joints[j].Position.Z;
+
+								m_pCoordinateMapper->MapCameraPointToDepthSpace(p, &depthPoint);
+								m_pCoordinateMapper->MapCameraPointToColorSpace(p, &colorPoint);
+
+								m_jsBodyFrame.bodies[i].joints[j].floorDepthX = depthPoint.X / cDepthWidth;
+								m_jsBodyFrame.bodies[i].joints[j].floorDepthY = depthPoint.Y / cDepthHeight;
+
+								m_jsBodyFrame.bodies[i].joints[j].floorColorX = colorPoint.X / cColorWidth;
+								m_jsBodyFrame.bodies[i].joints[j].floorColorY = colorPoint.Y / cColorHeight;
+
+								m_jsBodyFrame.bodies[i].joints[j].floorCameraX = p.X;
+								m_jsBodyFrame.bodies[i].joints[j].floorCameraY = p.Y;
+								m_jsBodyFrame.bodies[i].joints[j].floorCameraZ = p.Z;
+							}
+						}
+						else
+						{
+							for (int j = 0; j < _countof(joints); ++j)
+							{
+								m_jsBodyFrame.bodies[i].joints[j].hasFloorData = false;
+							}
+						}
+					}
+				}
+				else
+				{
+					m_jsBodyFrame.bodies[i].trackingId = 0;
+				}
+			}
+		}
+	}
+
+	for (int i = 0; i < _countof(ppBodies); ++i)
+	{
+		SafeRelease(ppBodies[i]);
+	}
+	return hr;
+}
+
 void BodyReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		uv_mutex_lock(&m_mBodyReaderMutex);
 		if(!m_bBodyThreadRunning)
 		{
-			//make sure to unlock the mutex
-			uv_mutex_unlock(&m_mBodyReaderMutex);
 			break;
 		}
 
 		IBodyFrame* pBodyFrame = NULL;
-		IBody* ppBodies[BODY_COUNT] = {0};
-		HRESULT hr, hr2;
+		HRESULT hr;
 
 		hr = m_pBodyFrameReader->AcquireLatestFrame(&pBodyFrame);
 		if(SUCCEEDED(hr))
 		{
-			hr = pBodyFrame->GetAndRefreshBodyData(_countof(ppBodies), ppBodies);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			DepthSpacePoint depthPoint = {0};
-			ColorSpacePoint colorPoint = {0};
-			Vector4 floorClipPlane = {0};
-			//floor clip plane
-			m_jsBodyFrame.hasFloorClipPlane = false;
-			hr2 = pBodyFrame->get_FloorClipPlane(&floorClipPlane);
-			if(SUCCEEDED(hr2))
+			hr = processBodyFrameData(pBodyFrame);
+			if (SUCCEEDED(hr))
 			{
-				m_jsBodyFrame.hasFloorClipPlane = true;
-				m_jsBodyFrame.floorClipPlaneX = floorClipPlane.x;
-				m_jsBodyFrame.floorClipPlaneY = floorClipPlane.y;
-				m_jsBodyFrame.floorClipPlaneZ = floorClipPlane.z;
-				m_jsBodyFrame.floorClipPlaneW = floorClipPlane.w;
-				//camera angle
-				calculateCameraAngle_(floorClipPlane, &m_jsBodyFrame.cameraAngle, &m_jsBodyFrame.cosCameraAngle, &m_jsBodyFrame.sinCameraAngle);
+				//we have everything ready for our main loop, lock the mutex & copy the data to global memory
+				uv_mutex_lock(&m_mBodyReaderMutex);
+				//copy into object for V8
+				memcpy(&m_jsBodyFrameV8, &m_jsBodyFrame, sizeof(JSBodyFrame));
+				//unlock the mutex again
+				uv_mutex_unlock(&m_mBodyReaderMutex);
+				//notify event loop
+				uv_async_send(&m_aBodyAsync);
 			}
-			for (int i = 0; i < _countof(ppBodies); ++i)
-			{
-				IBody* pBody = ppBodies[i];
-				if (pBody)
-				{
-					BOOLEAN bTracked = false;
-					hr = pBody->get_IsTracked(&bTracked);
-					m_jsBodyFrame.bodies[i].tracked = bTracked;
-
-					if(bTracked)
-					{
-						UINT64 iTrackingId = 0;
-						hr = pBody->get_TrackingId(&iTrackingId);
-						m_jsBodyFrame.bodies[i].trackingId = iTrackingId;
-						//hand state
-						HandState leftHandState = HandState_Unknown;
-						HandState rightHandState = HandState_Unknown;
-						pBody->get_HandLeftState(&leftHandState);
-						pBody->get_HandRightState(&rightHandState);
-						m_jsBodyFrame.bodies[i].leftHandState = leftHandState;
-						m_jsBodyFrame.bodies[i].rightHandState = rightHandState;
-						//go through the joints
-						Joint joints[JointType_Count];
-						hr = pBody->GetJoints(_countof(joints), joints);
-						if (SUCCEEDED(hr))
-						{
-							for (int j = 0; j < _countof(joints); ++j)
-							{
-								m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
-								m_pCoordinateMapper->MapCameraPointToColorSpace(joints[j].Position, &colorPoint);
-
-								m_jsBodyFrame.bodies[i].joints[j].depthX = depthPoint.X / cDepthWidth;
-								m_jsBodyFrame.bodies[i].joints[j].depthY = depthPoint.Y / cDepthHeight;
-
-								m_jsBodyFrame.bodies[i].joints[j].colorX = colorPoint.X / cColorWidth;
-								m_jsBodyFrame.bodies[i].joints[j].colorY = colorPoint.Y / cColorHeight;
-
-								m_jsBodyFrame.bodies[i].joints[j].cameraX = joints[j].Position.X;
-								m_jsBodyFrame.bodies[i].joints[j].cameraY = joints[j].Position.Y;
-								m_jsBodyFrame.bodies[i].joints[j].cameraZ = joints[j].Position.Z;
-
-								m_jsBodyFrame.bodies[i].joints[j].jointType = joints[j].JointType;
-							}
-							//calculate body ground position
-							if(m_includeJointFloorData && m_jsBodyFrame.hasFloorClipPlane)
-							{
-								for (int j = 0; j < _countof(joints); ++j)
-								{
-									m_jsBodyFrame.bodies[i].joints[j].hasFloorData = true;
-									//distance of joint to floor
-									float distance = getJointDistanceFromFloor_(floorClipPlane, joints[j], m_jsBodyFrame.cameraAngle, m_jsBodyFrame.cosCameraAngle, m_jsBodyFrame.sinCameraAngle);
-									CameraSpacePoint p;
-									p.X = joints[j].Position.X;
-									p.Y = joints[j].Position.Y - distance;
-									p.Z = joints[j].Position.Z;
-
-									m_pCoordinateMapper->MapCameraPointToDepthSpace(p, &depthPoint);
-									m_pCoordinateMapper->MapCameraPointToColorSpace(p, &colorPoint);
-
-									m_jsBodyFrame.bodies[i].joints[j].floorDepthX = depthPoint.X / cDepthWidth;
-									m_jsBodyFrame.bodies[i].joints[j].floorDepthY = depthPoint.Y / cDepthHeight;
-
-									m_jsBodyFrame.bodies[i].joints[j].floorColorX = colorPoint.X / cColorWidth;
-									m_jsBodyFrame.bodies[i].joints[j].floorColorY = colorPoint.Y / cColorHeight;
-
-									m_jsBodyFrame.bodies[i].joints[j].floorCameraX = p.X;
-									m_jsBodyFrame.bodies[i].joints[j].floorCameraY = p.Y;
-									m_jsBodyFrame.bodies[i].joints[j].floorCameraZ = p.Z;
-								}
-							}
-							else
-							{
-								for (int j = 0; j < _countof(joints); ++j)
-								{
-									m_jsBodyFrame.bodies[i].joints[j].hasFloorData = false;
-								}
-							}
-						}
-					}
-					else
-					{
-						m_jsBodyFrame.bodies[i].trackingId = 0;
-					}
-				}
-			}
-		}
-		if (SUCCEEDED(hr))
-		{
-			//notify event loop
-			uv_async_send(&m_aBodyAsync);
 		}
 		SafeRelease(pBodyFrame);
-		for (int i = 0; i < _countof(ppBodies); ++i)
-		{
-			SafeRelease(ppBodies[i]);
-		}
-		uv_mutex_unlock(&m_mBodyReaderMutex);
 	}
 }
 
@@ -1043,8 +1118,6 @@ NAN_METHOD(CloseBodyReaderFunction)
 	info.GetReturnValue().Set(true);
 }
 
-
-
 NAUV_WORK_CB(MultiSourceProgress_) {
 	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
@@ -1057,8 +1130,6 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 		{
 			//reuse the existing buffer
 			v8::Local<v8::Object> v8ColorPixels = Nan::New(m_persistentColorPixels);
-			char* data = node::Buffer::Data(v8ColorPixels);
-			memcpy(data, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
 
 			v8::Local<v8::Object> v8ColorResult = Nan::New<v8::Object>();
 			Nan::Set(v8ColorResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8ColorPixels);
@@ -1075,8 +1146,6 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 		{
 			//reuse the existing buffer
 			v8::Local<v8::Object> v8DepthPixels = Nan::New(m_persistentDepthPixels);
-			char* data = node::Buffer::Data(v8DepthPixels);
-			memcpy(data, m_pDepthPixels, cDepthWidth * cDepthHeight);
 
 			v8::Local<v8::Object> v8DepthResult = Nan::New<v8::Object>();
 			Nan::Set(v8DepthResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8DepthPixels);
@@ -1109,12 +1178,9 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 				v8::Local<v8::Object> v8body = Nan::New<v8::Object>();
 				Nan::Set(v8body, Nan::New<v8::String>("bodyIndex").ToLocalChecked(), Nan::New<v8::Number>(i));
 				//something weird is going on: every x frames hasPixels is false, but body is still tracked?
-				if(m_jsBodyFrame.bodies[i].trackPixels && (m_jsBodyFrame.bodies[i].hasPixels || m_jsBodyFrame.bodies[i].tracked)) {
+				if(m_jsBodyFrameV8.bodies[i].trackPixels && m_jsBodyFrameV8.bodies[i].hasPixels) {
 					//reuse the existing buffer
 					v8::Local<v8::Value> v8ColorPixels = v8BodyIndexColorPixels->Get(i);
-					char* data = node::Buffer::Data(v8ColorPixels);
-					size_t len = node::Buffer::Length(v8ColorPixels);
-					memcpy(data, m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
 					Nan::Set(v8body, Nan::New<v8::String>("buffer").ToLocalChecked(), v8ColorPixels);
 				}
 				Nan::Set(v8bodies, i, v8body);
@@ -1142,15 +1208,12 @@ void MultiSourceReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		uv_mutex_lock(&m_mMultiSourceReaderMutex);
 		if(!m_bMultiSourceThreadRunning)
 		{
-			//make sure to unlock the mutex
-			uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 			break;
 		}
 
-		HRESULT hr, hr2;
+		HRESULT hr;
 		IMultiSourceFrame* pMultiSourceFrame = NULL;
 
 		hr = m_pMultiSourceFrameReader->AcquireLatestFrame(&pMultiSourceFrame);
@@ -1159,10 +1222,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 			//get the frames
 			IColorFrameReference* pColorFrameReference = NULL;
 			IColorFrame* pColorFrame = NULL;
-			IFrameDescription* pColorFrameDescription = NULL;
-			ColorImageFormat colorImageFormat = ColorImageFormat_None;
-			UINT nColorBufferSize = 0;
-			RGBQUAD *pColorBuffer = NULL;
 
 			IInfraredFrameReference* pInfraredFrameReference = NULL;
 			IInfraredFrame* pInfraredFrame = NULL;
@@ -1172,12 +1231,8 @@ void MultiSourceReaderThreadLoop(void *arg)
 
 			IDepthFrameReference* pDepthFrameReference = NULL;
 			IDepthFrame* pDepthFrame = NULL;
-			IFrameDescription* pDepthFrameDescription = NULL;
 			UINT nDepthBufferSize = 0;
 			UINT16 *pDepthBuffer = NULL;
-			USHORT nDepthMinReliableDistance = 0;
-			USHORT nDepthMaxDistance = 0;
-			int mapDepthToByte = 8000 / 256;
 
 			IBodyIndexFrameReference* pBodyIndexFrameReference = NULL;
 			IBodyIndexFrame* pBodyIndexFrame = NULL;
@@ -1191,7 +1246,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 
 			IBodyFrameReference* pBodyFrameReference = NULL;
 			IBodyFrame* pBodyFrame = NULL;
-			IBody* ppBodies[BODY_COUNT] = {0};
 
 			if(FrameSourceTypes::FrameSourceTypes_Color & m_enabledFrameSourceTypes)
 			{
@@ -1202,45 +1256,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 				}
 				if (SUCCEEDED(hr))
 				{
-					hr = pColorFrame->get_FrameDescription(&pColorFrameDescription);
-				}
-
-				if (SUCCEEDED(hr))
-				{
-					hr = pColorFrameDescription->get_HorizontalFieldOfView(&m_fColorHorizontalFieldOfView);
-				}
-
-				if (SUCCEEDED(hr))
-				{
-					hr = pColorFrameDescription->get_VerticalFieldOfView(&m_fColorVerticalFieldOfView);
-				}
-
-				if (SUCCEEDED(hr))
-				{
-					hr = pColorFrameDescription->get_DiagonalFieldOfView(&m_fColorDiagonalFieldOfView);
-				}
-
-				if (SUCCEEDED(hr))
-				{
-					hr = pColorFrame->get_RawColorImageFormat(&colorImageFormat);
-				}
-
-				if (SUCCEEDED(hr))
-				{
-					if (colorImageFormat == ColorImageFormat_Rgba)
-					{
-						hr = pColorFrame->AccessRawUnderlyingBuffer(&nColorBufferSize, reinterpret_cast<BYTE**>(&pColorBuffer));
-					}
-					else if (m_pColorPixels)
-					{
-						pColorBuffer = m_pColorPixels;
-						nColorBufferSize = cColorWidth * cColorHeight * sizeof(RGBQUAD);
-						hr = pColorFrame->CopyConvertedFrameDataToArray(nColorBufferSize, reinterpret_cast<BYTE*>(pColorBuffer), ColorImageFormat_Rgba);
-					}
-					else
-					{
-						hr = E_FAIL;
-					}
+					hr = processColorFrameData(pColorFrame);
 				}
 			}
 			if(FrameSourceTypes::FrameSourceTypes_Infrared & m_enabledFrameSourceTypes)
@@ -1250,6 +1266,10 @@ void MultiSourceReaderThreadLoop(void *arg)
 				{
 					hr = pInfraredFrameReference->AcquireFrame(&pInfraredFrame);
 				}
+				if (SUCCEEDED(hr))
+				{
+					hr = processInfraredFrameData(pInfraredFrame);
+				}
 			}
 			if(FrameSourceTypes::FrameSourceTypes_LongExposureInfrared & m_enabledFrameSourceTypes)
 			{
@@ -1257,6 +1277,10 @@ void MultiSourceReaderThreadLoop(void *arg)
 				if (SUCCEEDED(hr))
 				{
 					hr = pLongExposureInfraredFrameReference->AcquireFrame(&pLongExposureInfraredFrame);
+				}
+				if (SUCCEEDED(hr))
+				{
+					hr = processLongExposureInfraredFrameData(pLongExposureInfraredFrame);
 				}
 			}
 			if(FrameSourceTypes::FrameSourceTypes_Depth & m_enabledFrameSourceTypes)
@@ -1268,29 +1292,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 				}
 				if (SUCCEEDED(hr))
 				{
-					hr = pDepthFrame->get_FrameDescription(&pDepthFrameDescription);
-				}
-				if (SUCCEEDED(hr))
-				{
-					hr = pDepthFrameDescription->get_HorizontalFieldOfView(&m_fDepthHorizontalFieldOfView);
-				}
-
-				if (SUCCEEDED(hr))
-				{
-					hr = pDepthFrameDescription->get_VerticalFieldOfView(&m_fDepthVerticalFieldOfView);
-				}
-
-				if (SUCCEEDED(hr))
-				{
-					hr = pDepthFrameDescription->get_DiagonalFieldOfView(&m_fDepthDiagonalFieldOfView);
-				}
-				if (SUCCEEDED(hr))
-				{
-					hr = pDepthFrame->get_DepthMinReliableDistance(&nDepthMinReliableDistance);
-				}
-				if (SUCCEEDED(hr))
-				{
-					hr = pDepthFrame->get_DepthMaxReliableDistance(&nDepthMaxDistance);
+					hr = processDepthFrameData(pDepthFrame);
 				}
 				if (SUCCEEDED(hr))
 				{
@@ -1322,7 +1324,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 				}
 				if(SUCCEEDED(hr))
 				{
-					hr = pBodyFrame->GetAndRefreshBodyData(_countof(ppBodies), ppBodies);
+					hr = processBodyFrameData(pBodyFrame);
 				}
 			}
 
@@ -1355,7 +1357,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 					{
 						//default transparent colors
 						for( int i = 0 ; i < BODY_COUNT ; i++ ) {
-							memset(m_jsBodyFrame.bodies[i].colorPixels, 0, cColorWidth * cColorHeight * sizeof(RGBQUAD));
+							memset(m_pBodyIndexColorPixels[i], 0, cColorWidth * cColorHeight * sizeof(RGBQUAD));
 						}
 
 						for (int colorIndex = 0; colorIndex < (cColorWidth*cColorHeight); ++colorIndex)
@@ -1378,150 +1380,9 @@ void MultiSourceReaderThreadLoop(void *arg)
 									{
 										m_jsBodyFrame.bodies[player].hasPixels = true;
 										// set source for copy to the color pixel
-										m_jsBodyFrame.bodies[player].colorPixels[colorIndex] = pColorBuffer[colorIndex];
+										m_pBodyIndexColorPixels[player][colorIndex] = m_pColorPixels[colorIndex];
 									}
 								}
-							}
-						}
-					}
-				}
-				if(SUCCEEDED(hr) && NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes)
-				{
-					//copy the color data to the result buffer
-					memcpy(m_pColorPixels, pColorBuffer, cColorWidth * cColorHeight * sizeof(RGBQUAD));
-				}
-			}
-
-			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Depth & m_enabledFrameSourceTypes)
-			{
-				//depth image
-				if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
-				{
-					mapDepthToByte = nDepthMaxDistance / 256;
-					if (m_pDepthPixels && pDepthBuffer)
-					{
-						char* pDepthPixel = m_pDepthPixels;
-
-						// end pixel is start + width*height - 1
-						const UINT16* pDepthBufferEnd = pDepthBuffer + (cDepthWidth * cDepthHeight);
-
-						while (pDepthBuffer < pDepthBufferEnd)
-						{
-							USHORT depth = *pDepthBuffer;
-
-							BYTE intensity = static_cast<BYTE>(depth >= nDepthMinReliableDistance && depth <= nDepthMaxDistance ? (depth / mapDepthToByte) : 0);
-							*pDepthPixel = intensity;
-
-							++pDepthPixel;
-							++pDepthBuffer;
-						}
-					}
-				}
-			}
-
-			//todo: add raw depth & body index depth to above
-
-			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Body & m_enabledFrameSourceTypes)
-			{
-				//body frame
-				if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
-				{
-					DepthSpacePoint depthPoint = {0};
-					ColorSpacePoint colorPoint = {0};
-					Vector4 floorClipPlane = {0};
-					//floor clip plane
-					hr2 = pBodyFrame->get_FloorClipPlane(&floorClipPlane);
-					m_jsBodyFrame.hasFloorClipPlane = false;
-					if(SUCCEEDED(hr2))
-					{
-						m_jsBodyFrame.hasFloorClipPlane = true;
-						m_jsBodyFrame.floorClipPlaneX = floorClipPlane.x;
-						m_jsBodyFrame.floorClipPlaneY = floorClipPlane.y;
-						m_jsBodyFrame.floorClipPlaneZ = floorClipPlane.z;
-						m_jsBodyFrame.floorClipPlaneW = floorClipPlane.w;
-						calculateCameraAngle_(floorClipPlane, &m_jsBodyFrame.cameraAngle, &m_jsBodyFrame.cosCameraAngle, &m_jsBodyFrame.sinCameraAngle);
-					}
-					for (int i = 0; i < _countof(ppBodies); ++i)
-					{
-						IBody* pBody = ppBodies[i];
-						if (pBody)
-						{
-							BOOLEAN bTracked = false;
-							hr = pBody->get_IsTracked(&bTracked);
-							m_jsBodyFrame.bodies[i].tracked = bTracked;
-							if(bTracked)
-							{
-								UINT64 iTrackingId = 0;
-								hr = pBody->get_TrackingId(&iTrackingId);
-								m_jsBodyFrame.bodies[i].trackingId = iTrackingId;
-								//hand state
-								HandState leftHandState = HandState_Unknown;
-								HandState rightHandState = HandState_Unknown;
-								pBody->get_HandLeftState(&leftHandState);
-								pBody->get_HandRightState(&rightHandState);
-								m_jsBodyFrame.bodies[i].leftHandState = leftHandState;
-								m_jsBodyFrame.bodies[i].rightHandState = rightHandState;
-								//go through the joints
-								Joint joints[JointType_Count];
-								hr = pBody->GetJoints(_countof(joints), joints);
-								if (SUCCEEDED(hr))
-								{
-									for (int j = 0; j < _countof(joints); ++j)
-									{
-										m_pCoordinateMapper->MapCameraPointToDepthSpace(joints[j].Position, &depthPoint);
-										m_pCoordinateMapper->MapCameraPointToColorSpace(joints[j].Position, &colorPoint);
-
-										m_jsBodyFrame.bodies[i].joints[j].depthX = depthPoint.X / cDepthWidth;
-										m_jsBodyFrame.bodies[i].joints[j].depthY = depthPoint.Y / cDepthHeight;
-
-										m_jsBodyFrame.bodies[i].joints[j].colorX = colorPoint.X / cColorWidth;
-										m_jsBodyFrame.bodies[i].joints[j].colorY = colorPoint.Y / cColorHeight;
-
-										m_jsBodyFrame.bodies[i].joints[j].cameraX = joints[j].Position.X;
-										m_jsBodyFrame.bodies[i].joints[j].cameraY = joints[j].Position.Y;
-										m_jsBodyFrame.bodies[i].joints[j].cameraZ = joints[j].Position.Z;
-
-										m_jsBodyFrame.bodies[i].joints[j].jointType = joints[j].JointType;
-									}
-									//calculate body ground position
-									if(m_includeJointFloorData && m_jsBodyFrame.hasFloorClipPlane)
-									{
-										for (int j = 0; j < _countof(joints); ++j)
-										{
-											m_jsBodyFrame.bodies[i].joints[j].hasFloorData = true;
-											//distance of joint to floor
-											float distance = getJointDistanceFromFloor_(floorClipPlane, joints[j], m_jsBodyFrame.cameraAngle, m_jsBodyFrame.cosCameraAngle, m_jsBodyFrame.sinCameraAngle);
-											CameraSpacePoint p;
-											p.X = joints[j].Position.X;
-											p.Y = joints[j].Position.Y - distance;
-											p.Z = joints[j].Position.Z;
-
-											m_pCoordinateMapper->MapCameraPointToDepthSpace(p, &depthPoint);
-											m_pCoordinateMapper->MapCameraPointToColorSpace(p, &colorPoint);
-
-											m_jsBodyFrame.bodies[i].joints[j].floorDepthX = depthPoint.X / cDepthWidth;
-											m_jsBodyFrame.bodies[i].joints[j].floorDepthY = depthPoint.Y / cDepthHeight;
-
-											m_jsBodyFrame.bodies[i].joints[j].floorColorX = colorPoint.X / cColorWidth;
-											m_jsBodyFrame.bodies[i].joints[j].floorColorY = colorPoint.Y / cColorHeight;
-
-											m_jsBodyFrame.bodies[i].joints[j].floorCameraX = p.X;
-											m_jsBodyFrame.bodies[i].joints[j].floorCameraY = p.Y;
-											m_jsBodyFrame.bodies[i].joints[j].floorCameraZ = p.Z;
-										}
-									}
-									else
-									{
-										for (int j = 0; j < _countof(joints); ++j)
-										{
-											m_jsBodyFrame.bodies[i].joints[j].hasFloorData = false;
-										}
-									}
-								}
-							}
-							else
-							{
-								m_jsBodyFrame.bodies[i].trackingId = 0;
 							}
 						}
 					}
@@ -1532,7 +1393,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 			//todo: long exposure infrared
 
 			//release memory
-			SafeRelease(pColorFrameDescription);
 			SafeRelease(pColorFrame);
 			SafeRelease(pColorFrameReference);
 
@@ -1542,7 +1402,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 			SafeRelease(pLongExposureInfraredFrame);
 			SafeRelease(pLongExposureInfraredFrameReference);
 
-			SafeRelease(pDepthFrameDescription);
 			SafeRelease(pDepthFrame);
 			SafeRelease(pDepthFrameReference);
 
@@ -1550,24 +1409,48 @@ void MultiSourceReaderThreadLoop(void *arg)
 			SafeRelease(pBodyIndexFrame);
 			SafeRelease(pBodyIndexFrameReference);
 
-			for (int i = 0; i < _countof(ppBodies); ++i)
-			{
-				SafeRelease(ppBodies[i]);
-			}
 			SafeRelease(pBodyFrame);
 			SafeRelease(pBodyFrameReference);
-
 		}
 
 		if (SUCCEEDED(hr))
 		{
+			//we have everything ready for our main loop, lock the mutex & copy the data to global memory
+			uv_mutex_lock(&m_mMultiSourceReaderMutex);
+			if(NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes)
+			{
+				m_fColorHorizontalFieldOfViewV8 = m_fColorHorizontalFieldOfView;
+				m_fColorVerticalFieldOfViewV8 = m_fColorVerticalFieldOfView;
+				m_fColorDiagonalFieldOfViewV8 = m_fColorDiagonalFieldOfView;
+				//copy into buffer for V8
+				memcpy(m_pColorPixelsV8, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
+			}
+			//depth image
+			if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
+			{
+				m_fDepthHorizontalFieldOfViewV8 = m_fDepthHorizontalFieldOfView;
+				m_fDepthVerticalFieldOfViewV8 = m_fDepthVerticalFieldOfView;
+				m_fDepthDiagonalFieldOfViewV8 = m_fDepthDiagonalFieldOfView;
+				//copy into buffer for V8
+				memcpy(m_pDepthPixelsV8, m_pDepthPixels, cDepthWidth * cDepthHeight);
+			}
+			if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
+			{
+				//copy into object for V8
+				memcpy(&m_jsBodyFrameV8, &m_jsBodyFrame, sizeof(JSBodyFrame));
+			}
+			if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
+			{
+				//copy into object for V8
+				memcpy(m_pBodyIndexColorPixelsV8, m_pBodyIndexColorPixels, BODY_COUNT * cColorWidth * cColorHeight * sizeof(RGBQUAD));
+			}
+			//unlock the mutex
+			uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 			//notify event loop
 			uv_async_send(&m_aMultiSourceAsync);
 		}
 
 		SafeRelease(pMultiSourceFrame);
-
-		uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 	}
 }
 
@@ -1702,19 +1585,19 @@ NAN_MODULE_INIT(Init)
 {
 	//color
 	uv_mutex_init(&m_mColorReaderMutex);
-	m_persistentColorPixels.Reset<v8::Object>(Nan::CopyBuffer((char *)m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
+	m_persistentColorPixels.Reset<v8::Object>(Nan::NewBuffer((char *)m_pColorPixelsV8, cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
 
 	//infrared
 	uv_mutex_init(&m_mInfraredReaderMutex);
-	m_persistentInfraredPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pInfraredPixels, cInfraredWidth * cInfraredHeight).ToLocalChecked());
+	m_persistentInfraredPixels.Reset<v8::Object>(Nan::NewBuffer(m_pInfraredPixelsV8, cInfraredWidth * cInfraredHeight).ToLocalChecked());
 
 	//long exposure infrared
 	uv_mutex_init(&m_mLongExposureInfraredReaderMutex);
-	m_persistentLongExposureInfraredPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight).ToLocalChecked());
+	m_persistentLongExposureInfraredPixels.Reset<v8::Object>(Nan::NewBuffer(m_pLongExposureInfraredPixelsV8, cLongExposureInfraredWidth * cLongExposureInfraredHeight).ToLocalChecked());
 
 	//depth
 	uv_mutex_init(&m_mDepthReaderMutex);
-	m_persistentDepthPixels.Reset<v8::Object>(Nan::CopyBuffer(m_pDepthPixels, cDepthWidth * cDepthHeight).ToLocalChecked());
+	m_persistentDepthPixels.Reset<v8::Object>(Nan::NewBuffer(m_pDepthPixelsV8, cDepthWidth * cDepthHeight).ToLocalChecked());
 
 	//body
 	uv_mutex_init(&m_mBodyReaderMutex);
@@ -1724,7 +1607,7 @@ NAN_MODULE_INIT(Init)
 	v8::Local<v8::Object> v8BodyIndexColorPixels = Nan::New<v8::Object>();
 	for(int i = 0; i < BODY_COUNT; i++)
 	{
-		Nan::Set(v8BodyIndexColorPixels, i, Nan::CopyBuffer((char *)m_jsBodyFrame.bodies[i].colorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
+		Nan::Set(v8BodyIndexColorPixels, i, Nan::NewBuffer((char *)m_pBodyIndexColorPixelsV8[i], cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
 	}
 	m_persistentBodyIndexColorPixels.Reset<v8::Object>(v8BodyIndexColorPixels);
 

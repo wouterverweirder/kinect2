@@ -1,4 +1,4 @@
-var target = '0.30.3';
+var target = '0.30.4';
 var arch = 'x64';
 
 if(process.argv.length > 2)

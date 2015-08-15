@@ -4,7 +4,7 @@
 
 	var colorCanvas = document.getElementById('colorCanvas');
 
-	var ImageBufferRendererWebgl = require('./js/image-buffer-renderer-webgl.js');
+	var ImageBufferRendererWebgl = require('../shared/js/image-buffer-renderer-webgl.js');
 	var colorRenderer = new ImageBufferRendererWebgl(colorCanvas);
 
 	function processImageData(imageBuffer, width, height) {
