@@ -54,7 +54,7 @@
 					kinect.trackPixelsForBodyIndices([closestBodyIndex]);
 				} else {
 					kinect.trackPixelsForBodyIndices(false);
-					colorRenderer.processImageData(imageBuffer, hiddenCanvas.width, hiddenCanvas.height);
+					colorRenderer.processImageData(emptyPixels.buffer, hiddenCanvas.width, hiddenCanvas.height);
 				}
 			}
 			else {
