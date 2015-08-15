@@ -252,15 +252,19 @@ void ColorReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		if(!m_bColorThreadRunning)
-		{
-			break;
-		}
 
 		IColorFrame* pColorFrame = NULL;
 		HRESULT hr;
 
+		//lock the mutex to get access to the frame reader
+		uv_mutex_lock(&m_mColorReaderMutex);
+		if(!m_bColorThreadRunning)
+		{
+			uv_mutex_unlock(&m_mColorReaderMutex);
+			break;
+		}
 		hr = m_pColorFrameReader->AcquireLatestFrame(&pColorFrame);
+		uv_mutex_unlock(&m_mColorReaderMutex);
 
 		if (SUCCEEDED(hr))
 		{
@@ -420,15 +424,19 @@ void InfraredReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		if(!m_bInfraredThreadRunning)
-		{
-			break;
-		}
 
 		IInfraredFrame* pInfraredFrame = NULL;
 		HRESULT hr;
 
+		//lock the mutex to get access to the frame reader
+		uv_mutex_lock(&m_mInfraredReaderMutex);
+		if(!m_bInfraredThreadRunning)
+		{
+			uv_mutex_unlock(&m_mInfraredReaderMutex);
+			break;
+		}
 		hr = m_pInfraredFrameReader->AcquireLatestFrame(&pInfraredFrame);
+		uv_mutex_unlock(&m_mInfraredReaderMutex);
 
 		if(SUCCEEDED(hr))
 		{
@@ -588,15 +596,19 @@ void LongExposureInfraredReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		if(!m_bLongExposureInfraredThreadRunning)
-		{
-			break;
-		}
 
 		ILongExposureInfraredFrame* pLongExposureInfraredFrame = NULL;
 		HRESULT hr;
 
+		//lock the mutex to get access to the frame reader
+		uv_mutex_lock(&m_mLongExposureInfraredReaderMutex);
+		if(!m_bLongExposureInfraredThreadRunning)
+		{
+			uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
+			break;
+		}
 		hr = m_pLongExposureInfraredFrameReader->AcquireLatestFrame(&pLongExposureInfraredFrame);
+		uv_mutex_unlock(&m_mLongExposureInfraredReaderMutex);
 
 		if (SUCCEEDED(hr))
 		{
@@ -753,15 +765,20 @@ void DepthReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		if(!m_bDepthThreadRunning)
-		{
-			break;
-		}
 
 		IDepthFrame* pDepthFrame = NULL;
 		HRESULT hr;
 
+		//lock the mutex to get access to the frame reader
+		uv_mutex_lock(&m_mDepthReaderMutex);
+		if(!m_bDepthThreadRunning)
+		{
+			uv_mutex_unlock(&m_mDepthReaderMutex);
+			break;
+		}
 		hr = m_pDepthFrameReader->AcquireLatestFrame(&pDepthFrame);
+		uv_mutex_unlock(&m_mDepthReaderMutex);
+
 		if (SUCCEEDED(hr))
 		{
 			hr = processDepthFrameData(pDepthFrame);
@@ -1045,15 +1062,20 @@ void BodyReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		if(!m_bBodyThreadRunning)
-		{
-			break;
-		}
 
 		IBodyFrame* pBodyFrame = NULL;
 		HRESULT hr;
 
+		//lock the mutex to get access to the frame reader
+		uv_mutex_lock(&m_mBodyReaderMutex);
+		if(!m_bBodyThreadRunning)
+		{
+			uv_mutex_unlock(&m_mBodyReaderMutex);
+			break;
+		}
 		hr = m_pBodyFrameReader->AcquireLatestFrame(&pBodyFrame);
+		uv_mutex_unlock(&m_mBodyReaderMutex);
+
 		if(SUCCEEDED(hr))
 		{
 			hr = processBodyFrameData(pBodyFrame);
@@ -1209,15 +1231,18 @@ void MultiSourceReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-		if(!m_bMultiSourceThreadRunning)
-		{
-			break;
-		}
-
 		HRESULT hr;
 		IMultiSourceFrame* pMultiSourceFrame = NULL;
 
+		//lock the mutex to get access to the frame reader
+		uv_mutex_lock(&m_mMultiSourceReaderMutex);
+		if(!m_bMultiSourceThreadRunning)
+		{
+			uv_mutex_unlock(&m_mMultiSourceReaderMutex);
+			break;
+		}
 		hr = m_pMultiSourceFrameReader->AcquireLatestFrame(&pMultiSourceFrame);
+		uv_mutex_unlock(&m_mMultiSourceReaderMutex);
 
 		if(SUCCEEDED(hr)) {
 			//get the frames
@@ -1459,7 +1484,6 @@ void MultiSourceReaderThreadLoop(void *arg)
 
 NAN_METHOD(OpenMultiSourceReaderFunction)
 {
-
 	uv_mutex_lock(&m_mMultiSourceReaderMutex);
 	if(m_pMultiSourceReaderCallback)
 	{
