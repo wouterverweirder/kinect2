@@ -1,6 +1,6 @@
 {
   "name": "kinect2",
-  "version": "0.0.29",
+  "version": "0.0.30",
   "description": "Nodejs library to access the kinect 2 data from the official MS SDK",
   "main": "./lib/kinect2.js",
   "scripts": {
@@ -21,6 +21,6 @@
   },
   "homepage": "https://github.com/wouterverweirder/kinect2",
   "dependencies": {
-    "nan": "^2.0.5"
+    "nan": "2.0.8"
   }
 }

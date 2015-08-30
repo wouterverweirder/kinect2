@@ -30,6 +30,12 @@ After this, npm install should work.
 $ npm install kinect2
 ```
 
+An alternative option is to npm install pangyp, and change your npm config (change to the path on your computer):
+
+``` bash
+$ npm config set node_gyp C:\Users\Wouter\.nvmw\iojs\v2.3.1\node_modules\pangyp\bin\node-gyp.js
+```
+
 ### electron
 
 If you want to use this module inside an electron application, you will need to [build this module for electron usage](https://github.com/atom/electron/blob/master/docs/tutorial/using-native-node-modules.md).

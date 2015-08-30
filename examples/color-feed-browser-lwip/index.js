@@ -1,4 +1,4 @@
-var Kinect2 = require('../../lib/kinect2'),
+var Kinect2 = require('../../lib/kinect2'), //change to 'kinect2' in a project of your own
 	lwip = require('lwip'),
 	express = require('express'),
 	app = express(),
@@ -47,22 +47,17 @@ if(kinect.open()) {
 				processingColorFrame = false;
 				return;
 			}
-			image.clone(function(err, clone){
-				if(err) {
-					processingColorFrame = false;
-					return;
-				}
-				clone.batch()
-					.scale(0.5)
-					.toBuffer('jpg', { quality: 50 }, function(err, buffer){
-						if(err) {
-							processingColorFrame = false;
-							return;
-						}
-						io.sockets.emit('colorFrame', buffer);
+			image.batch()
+				.toBuffer('jpg', { quality: 50 }, function(err, buffer){
+					if(err) {
 						processingColorFrame = false;
+						return;
+					}
+					io.sockets.sockets.forEach(function(socket){
+						socket.volatile.emit('colorFrame', buffer);
 					});
-			});
+					processingColorFrame = false;
+				});
 		});
 	});
 	kinect.openColorReader();

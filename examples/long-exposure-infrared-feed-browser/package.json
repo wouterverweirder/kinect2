@@ -1,6 +1,6 @@
 {
   "name": "infrared-feed-browser",
-  "version": "0.0.20",
+  "version": "0.0.30",
   "description": "display long exposure infrared feed in browser",
   "main": "index.js",
   "scripts": {

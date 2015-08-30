@@ -7,8 +7,13 @@
         "<!(node -e \"require('nan')\")",
         "$(KINECTSDK20_DIR)\\inc"
       ],
-      "libraries": [
-        "-l$(KINECTSDK20_DIR)\\lib\\x64\\kinect20.lib"
+      "conditions" : [
+      	["target_arch=='ia32'", {
+         "libraries": [ "-l$(KINECTSDK20_DIR)\\lib\\x86\\kinect20.lib" ]
+        }],
+        ["target_arch=='x64'", {
+          "libraries": [ "-l$(KINECTSDK20_DIR)\\lib\\x64\\kinect20.lib" ]
+        }]
       ]
     }
   ]

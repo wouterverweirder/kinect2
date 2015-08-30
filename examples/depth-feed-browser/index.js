@@ -1,4 +1,4 @@
-var Kinect2 = require('../../lib/kinect2'),
+var Kinect2 = require('../../lib/kinect2'), //change to 'kinect2' in a project of your own
 	express = require('express'),
 	app = express(),
 	server = require('http').createServer(app),
@@ -21,7 +21,10 @@ if(kinect.open()) {
 			compressing = true;
 			zlib.deflate(data, function(err, result){
 				if(!err) {
-					io.sockets.emit('depthFrame', result.toString('base64'));
+					var buffer = result.toString('base64');
+					io.sockets.sockets.forEach(function(socket){
+						socket.volatile.emit('depthFrame', buffer);
+					});
 				}
 				compressing = false;
 			});
