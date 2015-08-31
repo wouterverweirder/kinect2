@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Hello World!</title>
+		<style>
+		body {
+			background-color: black;
+		}
+		</style>
+	</head>
+	<body>
+		<canvas id="outputCanvas" width="512" height="424"></canvas>
+		<script src="../shared/js/fps.js"></script>
+		<script src="js/three.min.js"></script>
+		<script src="js/TrackballControls.js"></script>
+		<script>
+		(function(){
+			var Kinect2 = require('../../lib/kinect2');
+			var kinect = new Kinect2();
+
+			var depthWidth = 512, depthHeight = 424;
+
+			var renderer, camera, scene, controls;
+
+			renderer = new THREE.WebGLRenderer( {
+				canvas: document.getElementById('outputCanvas'),
+				alpha: 1, antialias: true, clearColor: 0xffffff
+			} );
+
+			camera = new THREE.PerspectiveCamera( 40, renderer.domElement.width / renderer.domElement.height, 1, 10000 );
+			camera.position.set( 0, 300, 3000 );
+			controls = new THREE.TrackballControls( camera, renderer.domElement );
+
+			scene = new THREE.Scene();
+
+			function createGrid() {
+				// ground box
+				var geometry = new THREE.BoxGeometry( 500, 2, 500 );
+				material = new THREE.MeshNormalMaterial();
+				var mesh = new THREE.Mesh( geometry, material );
+				mesh.position.set( 0, -1, 0 );
+				scene.add( mesh );
+				mesh = new THREE.GridHelper( 250, 10 );
+				scene.add( mesh );
+
+	      // axes
+				var axis = new THREE.AxisHelper( 250 );
+				scene.add( axis );
+				renderer.render( scene, camera );
+
+				var geometry = new THREE.BoxGeometry( 50, 20, 50 );
+				var material = new THREE.MeshNormalMaterial();
+				var box = new THREE.Mesh( geometry, material );
+				scene.add( box );
+      }
+
+      createGrid();
+
+			//create particles
+			var particles = new THREE.Geometry();
+			var colors = [];
+			var numParticles = depthWidth * depthHeight;
+			for(var i = 0; i < numParticles; i++) {
+				var x = i % depthWidth - depthWidth * 0.5;
+				var y = depthHeight - Math.floor(i / depthWidth);
+				var vertex = new THREE.Vector3(x, y, Math.random());
+				particles.vertices.push(vertex);
+				colors[i] = new THREE.Color(0xffffff);
+			}
+			particles.colors = colors;
+			var material = new THREE.PointCloudMaterial( { size: 3, vertexColors: THREE.VertexColors, transparent: true } );
+			mesh = new THREE.PointCloud(particles, material);
+			scene.add(mesh);
+
+			window.addEventListener( 'resize', onWindowResize, false );
+
+			function onWindowResize(){
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			function render() {
+				renderer.render( scene, camera );
+				controls.update();
+				requestAnimationFrame(render);
+			}
+
+			onWindowResize();
+			render();
+
+			var processing = false;
+
+			if(kinect.open()) {
+				kinect.on('multiSourceFrame', function(frame){
+					var depthBuffer = frame.rawDepth.buffer;
+					var depthColorBuffer = frame.depthColor.buffer;
+					if(processing) {
+						return;
+					}
+					processing = true;
+					var nDepthMinReliableDistance = 500;
+					var nDepthMaxDistance = 4500;
+					var mapDepthToByte = nDepthMaxDistance / 256;
+					var j = 0, k = 0;
+
+					for(var i = 0; i < depthBuffer.length; i+=2) {
+						var depth = (depthBuffer[i+1] << 8) + depthBuffer[i]; //get uint16 data from buffer
+						if(depth <= nDepthMinReliableDistance || depth >= nDepthMaxDistance) depth = Number.MAX_VALUE; //push them far far away so we don't see them
+						particles.vertices[j].z = (nDepthMaxDistance - depth) - 2000;
+						particles.colors[j].setRGB(depthColorBuffer[k] / 255, depthColorBuffer[k+1] / 255, depthColorBuffer[k+2] / 255);
+						j++;
+						k+= 4;
+					}
+					particles.verticesNeedUpdate = true;
+					particles.colorsNeedUpdate = true;
+					processing = false;
+				});
+
+				kinect.openMultiSourceReader({
+					frameTypes: Kinect2.FrameType.rawDepth | Kinect2.FrameType.depthColor
+				});
+			}
+		})();
+		</script>
+	</body>
+</html>

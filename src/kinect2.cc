@@ -24,6 +24,10 @@ char*										m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWid
 char*										m_pLongExposureInfraredPixelsV8 = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
 char*										m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
 char*										m_pDepthPixelsV8 = new char[cDepthWidth * cDepthHeight];
+UINT16*									m_pRawDepthValues = new UINT16[cDepthWidth * cDepthHeight];
+UINT16*									m_pRawDepthValuesV8 = new UINT16[cDepthWidth * cDepthHeight];
+RGBQUAD*								m_pDepthColorPixels = new RGBQUAD[cDepthWidth * cDepthHeight];
+RGBQUAD*								m_pDepthColorPixelsV8 = new RGBQUAD[cDepthWidth * cDepthHeight];
 
 bool 										m_trackPixelsForBodyIndexV8[BODY_COUNT];
 
@@ -34,6 +38,7 @@ JSBodyFrame							m_jsBodyFrame;
 JSBodyFrame							m_jsBodyFrameV8;
 
 DepthSpacePoint*				m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
+ColorSpacePoint*				m_pColorCoordinatesForDepth = new ColorSpacePoint[cDepthWidth * cDepthHeight];
 
 //enabledFrameSourceTypes refers to the kinect SDK frame source types
 DWORD										m_enabledFrameSourceTypes = 0;
@@ -45,6 +50,7 @@ Nan::Callback*					m_pColorReaderCallback;
 Nan::Callback*					m_pInfraredReaderCallback;
 Nan::Callback*					m_pLongExposureInfraredReaderCallback;
 Nan::Callback*					m_pDepthReaderCallback;
+Nan::Callback*					m_pRawDepthReaderCallback;
 Nan::Callback*					m_pBodyReaderCallback;
 Nan::Callback*					m_pMultiSourceReaderCallback;
 
@@ -52,6 +58,7 @@ uv_mutex_t							m_mColorReaderMutex;
 uv_mutex_t							m_mInfraredReaderMutex;
 uv_mutex_t							m_mLongExposureInfraredReaderMutex;
 uv_mutex_t							m_mDepthReaderMutex;
+uv_mutex_t							m_mRawDepthReaderMutex;
 uv_mutex_t							m_mBodyReaderMutex;
 uv_mutex_t							m_mMultiSourceReaderMutex;
 
@@ -98,6 +105,13 @@ float 									m_fDepthDiagonalFieldOfView;
 float 									m_fDepthHorizontalFieldOfViewV8;
 float 									m_fDepthVerticalFieldOfViewV8;
 float 									m_fDepthDiagonalFieldOfViewV8;
+
+uv_async_t							m_aRawDepthAsync;
+uv_thread_t							m_tRawDepthThread;
+bool 										m_bRawDepthThreadRunning = false;
+Nan::Persistent<Object> m_persistentRawDepthValues;
+
+Nan::Persistent<Object> m_persistentDepthColorPixels;
 
 uv_async_t							m_aBodyAsync;
 uv_thread_t							m_tBodyThread;
@@ -160,6 +174,7 @@ NAN_METHOD(CloseFunction)
 	stopReader(&m_mInfraredReaderMutex, &m_bInfraredThreadRunning, &m_tInfraredThread, (uv_handle_t*) &m_aInfraredAsync, m_pInfraredFrameReader);
 	stopReader(&m_mLongExposureInfraredReaderMutex, &m_bLongExposureInfraredThreadRunning, &m_tLongExposureInfraredThread, (uv_handle_t*) &m_aLongExposureInfraredAsync, m_pLongExposureInfraredFrameReader);
 	stopReader(&m_mDepthReaderMutex, &m_bDepthThreadRunning, &m_tDepthThread, (uv_handle_t*) &m_aDepthAsync, m_pDepthFrameReader);
+	stopReader(&m_mRawDepthReaderMutex, &m_bRawDepthThreadRunning, &m_tRawDepthThread, (uv_handle_t*) &m_aRawDepthAsync, m_pDepthFrameReader);
 	stopReader(&m_mBodyReaderMutex, &m_bBodyThreadRunning, &m_tBodyThread, (uv_handle_t*) &m_aBodyAsync, m_pBodyFrameReader);
 	stopReader(&m_mMultiSourceReaderMutex, &m_bMultiSourceThreadRunning, &m_tMultiSourceThread, (uv_handle_t*) &m_aMultiSourceAsync, m_pMultiSourceFrameReader);
 
@@ -849,6 +864,148 @@ NAN_METHOD(CloseDepthReaderFunction)
 	info.GetReturnValue().Set(true);
 }
 
+NAUV_WORK_CB(RawDepthProgress_) {
+	Nan::HandleScope scope;
+	uv_mutex_lock(&m_mRawDepthReaderMutex);
+	if(m_pRawDepthReaderCallback != NULL)
+	{
+		//reuse the existing buffer
+		v8::Local<v8::Object> v8RawDepthValues = Nan::New(m_persistentRawDepthValues);
+		Local<Value> argv[] = {
+			v8RawDepthValues
+		};
+		m_pRawDepthReaderCallback->Call(1, argv);
+	}
+	uv_mutex_unlock(&m_mRawDepthReaderMutex);
+}
+
+HRESULT processRawDepthFrameData(IDepthFrame* pDepthFrame)
+{
+	HRESULT hr;
+	IFrameDescription* pDepthFrameDescription = NULL;
+	USHORT nDepthMinReliableDistance;
+	USHORT nDepthMaxDistance;
+
+	hr = pDepthFrame->get_FrameDescription(&pDepthFrameDescription);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrameDescription->get_HorizontalFieldOfView(&m_fDepthHorizontalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrameDescription->get_VerticalFieldOfView(&m_fDepthVerticalFieldOfView);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrameDescription->get_DiagonalFieldOfView(&m_fDepthDiagonalFieldOfView);
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrame->get_DepthMinReliableDistance(&nDepthMinReliableDistance);
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrame->get_DepthMaxReliableDistance(&nDepthMaxDistance);
+	}
+	if (SUCCEEDED(hr))
+	{
+		UINT nDepthValuesSize = cDepthWidth * cDepthHeight;
+		hr = pDepthFrame->CopyFrameDataToArray(nDepthValuesSize, m_pRawDepthValues);
+	}
+	SafeRelease(pDepthFrameDescription);
+	return hr;
+}
+
+void RawDepthReaderThreadLoop(void *arg)
+{
+	while(1)
+	{
+
+		IDepthFrame* pDepthFrame = NULL;
+		HRESULT hr;
+
+		//lock the mutex to get access to the frame reader
+		uv_mutex_lock(&m_mRawDepthReaderMutex);
+		if(!m_bRawDepthThreadRunning)
+		{
+			uv_mutex_unlock(&m_mRawDepthReaderMutex);
+			break;
+		}
+		hr = m_pDepthFrameReader->AcquireLatestFrame(&pDepthFrame);
+		uv_mutex_unlock(&m_mRawDepthReaderMutex);
+
+		if (SUCCEEDED(hr))
+		{
+			hr = processRawDepthFrameData(pDepthFrame);
+
+			if (SUCCEEDED(hr))
+			{
+				//we have everything ready for our main loop, lock the mutex & copy the data to global memory
+				uv_mutex_lock(&m_mRawDepthReaderMutex);
+				m_fDepthHorizontalFieldOfViewV8 = m_fDepthHorizontalFieldOfView;
+				m_fDepthVerticalFieldOfViewV8 = m_fDepthVerticalFieldOfView;
+				m_fDepthDiagonalFieldOfViewV8 = m_fDepthDiagonalFieldOfView;
+				//copy into buffer for V8
+				memcpy(m_pRawDepthValuesV8, m_pRawDepthValues, cDepthWidth * cDepthHeight * sizeof(UINT16));
+				//unlock the mutex again
+				uv_mutex_unlock(&m_mRawDepthReaderMutex);
+				//notify event loop
+				uv_async_send(&m_aRawDepthAsync);
+			}
+		}
+		SafeRelease(pDepthFrame);
+	}
+}
+
+NAN_METHOD(OpenRawDepthReaderFunction)
+{
+
+	uv_mutex_lock(&m_mRawDepthReaderMutex);
+	if(m_pRawDepthReaderCallback)
+	{
+		delete m_pRawDepthReaderCallback;
+		m_pRawDepthReaderCallback = NULL;
+	}
+
+	m_pRawDepthReaderCallback = new Nan::Callback(info[0].As<Function>());
+
+	HRESULT hr;
+	IDepthFrameSource* pDepthFrameSource = NULL;
+
+	hr = m_pKinectSensor->get_DepthFrameSource(&pDepthFrameSource);
+	if (SUCCEEDED(hr))
+	{
+		hr = pDepthFrameSource->OpenReader(&m_pDepthFrameReader);
+	}
+	if (SUCCEEDED(hr))
+	{
+		m_bRawDepthThreadRunning = true;
+		uv_async_init(uv_default_loop(), &m_aRawDepthAsync, RawDepthProgress_);
+		uv_thread_create(&m_tRawDepthThread, RawDepthReaderThreadLoop, NULL);
+	}
+
+	SafeRelease(pDepthFrameSource);
+
+	uv_mutex_unlock(&m_mRawDepthReaderMutex);
+	if (SUCCEEDED(hr))
+	{
+		info.GetReturnValue().Set(true);
+	}
+	else
+	{
+		info.GetReturnValue().Set(false);
+	}
+}
+
+NAN_METHOD(CloseRawDepthReaderFunction)
+{
+	stopReader(&m_mRawDepthReaderMutex, &m_bRawDepthThreadRunning, &m_tRawDepthThread, (uv_handle_t*) &m_aRawDepthAsync, m_pDepthFrameReader);
+	info.GetReturnValue().Set(true);
+}
+
 v8::Local<v8::Object> getV8BodyFrame_()
 {
 	Nan::EscapableHandleScope scope;
@@ -1182,6 +1339,33 @@ NAUV_WORK_CB(MultiSourceProgress_) {
 			Nan::Set(v8Result, Nan::New<v8::String>("depth").ToLocalChecked(), v8DepthResult);
 		}
 
+		if(NodeKinect2FrameTypes::FrameTypes_RawDepth & m_enabledFrameTypes)
+		{
+			//reuse the existing buffer
+			v8::Local<v8::Object> v8RawDepthValues = Nan::New(m_persistentRawDepthValues);
+
+			v8::Local<v8::Object> v8RawDepthResult = Nan::New<v8::Object>();
+			Nan::Set(v8RawDepthResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8RawDepthValues);
+
+			//field of view
+			Nan::Set(v8RawDepthResult, Nan::New<v8::String>("horizontalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthHorizontalFieldOfViewV8));
+			Nan::Set(v8RawDepthResult, Nan::New<v8::String>("verticalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthVerticalFieldOfViewV8));
+			Nan::Set(v8RawDepthResult, Nan::New<v8::String>("diagonalFieldOfView").ToLocalChecked(), Nan::New<v8::Number>(m_fDepthDiagonalFieldOfViewV8));
+
+			Nan::Set(v8Result, Nan::New<v8::String>("rawDepth").ToLocalChecked(), v8RawDepthResult);
+		}
+
+		if(NodeKinect2FrameTypes::FrameTypes_DepthColor & m_enabledFrameTypes)
+		{
+			//reuse the existing buffer
+			v8::Local<v8::Object> v8DepthColorPixels = Nan::New(m_persistentDepthColorPixels);
+
+			v8::Local<v8::Object> v8DepthColorResult = Nan::New<v8::Object>();
+			Nan::Set(v8DepthColorResult, Nan::New<v8::String>("buffer").ToLocalChecked(), v8DepthColorPixels);
+
+			Nan::Set(v8Result, Nan::New<v8::String>("depthColor").ToLocalChecked(), v8DepthColorResult);
+		}
+
 		if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
 		{
 			v8::Local<v8::Object> v8BodyResult = getV8BodyFrame_();
@@ -1280,7 +1464,11 @@ void MultiSourceReaderThreadLoop(void *arg)
 				{
 					hr = pColorFrameReference->AcquireFrame(&pColorFrame);
 				}
-				if (SUCCEEDED(hr))
+				if (SUCCEEDED(hr) && (
+					NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes ||
+					NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes ||
+					NodeKinect2FrameTypes::FrameTypes_DepthColor & m_enabledFrameTypes
+				))
 				{
 					hr = processColorFrameData(pColorFrame);
 				}
@@ -1292,7 +1480,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 				{
 					hr = pInfraredFrameReference->AcquireFrame(&pInfraredFrame);
 				}
-				if (SUCCEEDED(hr))
+				if (SUCCEEDED(hr) && NodeKinect2FrameTypes::FrameTypes_Infrared & m_enabledFrameTypes)
 				{
 					hr = processInfraredFrameData(pInfraredFrame);
 				}
@@ -1304,7 +1492,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 				{
 					hr = pLongExposureInfraredFrameReference->AcquireFrame(&pLongExposureInfraredFrame);
 				}
-				if (SUCCEEDED(hr))
+				if (SUCCEEDED(hr) && NodeKinect2FrameTypes::FrameTypes_LongExposureInfrared & m_enabledFrameTypes)
 				{
 					hr = processLongExposureInfraredFrameData(pLongExposureInfraredFrame);
 				}
@@ -1316,9 +1504,16 @@ void MultiSourceReaderThreadLoop(void *arg)
 				{
 					hr = pDepthFrameReference->AcquireFrame(&pDepthFrame);
 				}
-				if (SUCCEEDED(hr))
+				if (SUCCEEDED(hr) && NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
 				{
 					hr = processDepthFrameData(pDepthFrame);
+				}
+				if (SUCCEEDED(hr) && (
+					NodeKinect2FrameTypes::FrameTypes_RawDepth & m_enabledFrameTypes ||
+					NodeKinect2FrameTypes::FrameTypes_DepthColor & m_enabledFrameTypes
+				))
+				{
+					hr = processRawDepthFrameData(pDepthFrame);
 				}
 				if (SUCCEEDED(hr))
 				{
@@ -1354,7 +1549,7 @@ void MultiSourceReaderThreadLoop(void *arg)
 				}
 			}
 
-			//process data according to requested frame types
+			//additional data processing combining sources
 			/*
 			FrameTypes_None	= 0,
 			FrameTypes_Color	= 0x1,
@@ -1369,13 +1564,14 @@ void MultiSourceReaderThreadLoop(void *arg)
 			FrameTypes_BodyIndexInfrared	= 0x100,
 			FrameTypes_BodyIndexLongExposureInfrared	= 0x200,
 			FrameTypes_RawDepth	= 0x400
+			FrameTypes_DepthColor	= 0x800
 			*/
 
 			//we do something with color data
 			if(SUCCEEDED(hr) && FrameSourceTypes::FrameSourceTypes_Color & m_enabledFrameSourceTypes)
 			{
 				//what are we doing with the color data?
-				//we could have color and / or bodyindexcolor
+				//we could have color and / or bodyindexcolor and / or depthcolor
 				if(SUCCEEDED(hr) && NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
 				{
 					hr = m_pCoordinateMapper->MapColorFrameToDepthSpace(cDepthWidth * cDepthHeight, (UINT16*)pDepthBuffer, cColorWidth * cColorHeight, m_pDepthCoordinatesForColor);
@@ -1408,6 +1604,33 @@ void MultiSourceReaderThreadLoop(void *arg)
 										// set source for copy to the color pixel
 										m_pBodyIndexColorPixels[player][colorIndex] = m_pColorPixels[colorIndex];
 									}
+								}
+							}
+						}
+					}
+				}
+
+				if(SUCCEEDED(hr) && NodeKinect2FrameTypes::FrameTypes_DepthColor & m_enabledFrameTypes)
+				{
+					hr = m_pCoordinateMapper->MapDepthFrameToColorSpace(cDepthWidth * cDepthHeight, (UINT16*)pDepthBuffer, cDepthWidth * cDepthHeight, m_pColorCoordinatesForDepth);
+					if (SUCCEEDED(hr))
+					{
+						//default transparent colors
+						memset(m_pDepthColorPixels, 0, cDepthWidth * cDepthHeight * sizeof(RGBQUAD));
+
+						for (int depthIndex = 0; depthIndex < (cDepthWidth*cDepthHeight); ++depthIndex)
+						{
+
+							ColorSpacePoint p = m_pColorCoordinatesForDepth[depthIndex];
+
+							// Values that are negative infinity means it is an invalid color to depth mapping so we
+							// skip processing for this pixel
+							if (p.X != -std::numeric_limits<float>::infinity() && p.Y != -std::numeric_limits<float>::infinity())
+							{
+								int colorX = static_cast<int>( std::floor( p.X + 0.5f ) );
+								int colorY = static_cast<int>( std::floor( p.Y + 0.5f ) );
+								if( ( 0 <= colorX ) && ( colorX < cColorWidth ) && ( 0 <= colorY ) && ( colorY < cColorHeight ) ){
+									m_pDepthColorPixels[depthIndex] = m_pColorPixels[colorY * cColorWidth + colorX];
 								}
 							}
 						}
@@ -1461,6 +1684,18 @@ void MultiSourceReaderThreadLoop(void *arg)
 				//copy into buffer for V8
 				memcpy(m_pDepthPixelsV8, m_pDepthPixels, cDepthWidth * cDepthHeight);
 			}
+			//raw depth
+			if(NodeKinect2FrameTypes::FrameTypes_RawDepth & m_enabledFrameTypes)
+			{
+				//copy into buffer for V8
+				memcpy(m_pRawDepthValuesV8, m_pRawDepthValues, cDepthWidth * cDepthHeight * sizeof(UINT16));
+			}
+			//depth colors
+			if(NodeKinect2FrameTypes::FrameTypes_DepthColor & m_enabledFrameTypes)
+			{
+				//copy into buffer for V8
+				memcpy(m_pDepthColorPixelsV8, m_pDepthColorPixels, cDepthWidth * cDepthHeight * sizeof(RGBQUAD));
+			}
 			if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
 			{
 				//copy into object for V8
@@ -1508,6 +1743,7 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 	if(
 		m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_Color
 		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexColor
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_DepthColor
 	) {
 		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Color;
 	}
@@ -1531,6 +1767,7 @@ NAN_METHOD(OpenMultiSourceReaderFunction)
 		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexInfrared
 		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_BodyIndexLongExposureInfrared
 		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_RawDepth
+		|| m_enabledFrameTypes & NodeKinect2FrameTypes::FrameTypes_DepthColor
 	) {
 		m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Depth;
 	}
@@ -1625,6 +1862,10 @@ NAN_MODULE_INIT(Init)
 	uv_mutex_init(&m_mDepthReaderMutex);
 	m_persistentDepthPixels.Reset<v8::Object>(Nan::NewBuffer(m_pDepthPixelsV8, cDepthWidth * cDepthHeight).ToLocalChecked());
 
+	//raw depth
+	uv_mutex_init(&m_mRawDepthReaderMutex);
+	m_persistentRawDepthValues.Reset<v8::Object>(Nan::NewBuffer((char *)m_pRawDepthValuesV8, cDepthWidth * cDepthHeight * sizeof(UINT16)).ToLocalChecked());
+
 	//body
 	uv_mutex_init(&m_mBodyReaderMutex);
 
@@ -1636,6 +1877,8 @@ NAN_MODULE_INIT(Init)
 		Nan::Set(v8BodyIndexColorPixels, i, Nan::NewBuffer((char *)m_pBodyIndexColorPixelsV8[i], cColorWidth * cColorHeight * sizeof(RGBQUAD)).ToLocalChecked());
 	}
 	m_persistentBodyIndexColorPixels.Reset<v8::Object>(v8BodyIndexColorPixels);
+	//Depth colors
+	m_persistentDepthColorPixels.Reset<v8::Object>(Nan::NewBuffer((char *)m_pDepthColorPixelsV8, cDepthWidth * cDepthHeight * sizeof(RGBQUAD)).ToLocalChecked());
 
 	Nan::Set(target, Nan::New<String>("open").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(OpenFunction)->GetFunction());
@@ -1657,6 +1900,10 @@ NAN_MODULE_INIT(Init)
 		Nan::New<FunctionTemplate>(OpenDepthReaderFunction)->GetFunction());
 	Nan::Set(target, Nan::New<String>("closeDepthReader").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(CloseDepthReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("openRawDepthReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenRawDepthReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("closeRawDepthReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseRawDepthReaderFunction)->GetFunction());
 	Nan::Set(target, Nan::New<String>("openBodyReader").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(OpenBodyReaderFunction)->GetFunction());
 	Nan::Set(target, Nan::New<String>("closeBodyReader").ToLocalChecked(),

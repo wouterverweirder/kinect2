@@ -1,0 +1,15 @@
+{
+  "name": "point-cloud-colors-electron",
+  "version": "0.0.31",
+  "description": "display raw depth cloud with colors in electron app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Wouter Verweirder <wouter.verweirder@gmail.com>",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "electron-prebuilt": "^0.30.2"
+  }
+}

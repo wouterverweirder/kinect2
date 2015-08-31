@@ -42,21 +42,22 @@ const int 							cLongExposureInfraredHeight = 424;
 typedef enum _NodeKinect2FrameTypes NodeKinect2FrameTypes;
 
 enum _NodeKinect2FrameTypes
-		{
-				FrameTypes_None	= 0,
-				FrameTypes_Color	= 0x1,
-				FrameTypes_Infrared	= 0x2,
-				FrameTypes_LongExposureInfrared	= 0x4,
-				FrameTypes_Depth	= 0x8,
-				FrameTypes_BodyIndex	= 0x10,
-				FrameTypes_Body	= 0x20,
-				FrameTypes_Audio	= 0x40,
-				FrameTypes_BodyIndexColor	= 0x80,
-				FrameTypes_BodyIndexDepth	= 0x10,
-				FrameTypes_BodyIndexInfrared	= 0x100,
-				FrameTypes_BodyIndexLongExposureInfrared	= 0x200,
-				FrameTypes_RawDepth	= 0x400
-		} ;
+{
+		FrameTypes_None	= 0,
+		FrameTypes_Color	= 0x1,
+		FrameTypes_Infrared	= 0x2,
+		FrameTypes_LongExposureInfrared	= 0x4,
+		FrameTypes_Depth	= 0x8,
+		FrameTypes_BodyIndex	= 0x10,
+		FrameTypes_Body	= 0x20,
+		FrameTypes_Audio	= 0x40,
+		FrameTypes_BodyIndexColor	= 0x80,
+		FrameTypes_BodyIndexDepth	= 0x10,
+		FrameTypes_BodyIndexInfrared	= 0x100,
+		FrameTypes_BodyIndexLongExposureInfrared	= 0x200,
+		FrameTypes_RawDepth	= 0x400,
+		FrameTypes_DepthColor	= 0x800
+} ;
 #endif // _NodeKinect2FrameTypes_
 
 #if defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(__WINDOWS__) || defined(__TOS_WIN__)
