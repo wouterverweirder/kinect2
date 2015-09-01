@@ -22,6 +22,11 @@ typedef struct _JSJoint
 	float floorCameraY;
 	float floorCameraZ;
 	//
+	float orientationX;
+	float orientationY;
+	float orientationZ;
+	float orientationW;
+	//
 	int jointType;
 } JSJoint;
 

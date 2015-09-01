@@ -1038,6 +1038,11 @@ v8::Local<v8::Object> getV8BodyFrame_()
 				Nan::Set(v8joint, Nan::New<v8::String>("cameraX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].cameraX));
 				Nan::Set(v8joint, Nan::New<v8::String>("cameraY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].cameraY));
 				Nan::Set(v8joint, Nan::New<v8::String>("cameraZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].cameraZ));
+				//orientation
+				Nan::Set(v8joint, Nan::New<v8::String>("orientationX").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].orientationX));
+				Nan::Set(v8joint, Nan::New<v8::String>("orientationY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].orientationY));
+				Nan::Set(v8joint, Nan::New<v8::String>("orientationZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].orientationZ));
+				Nan::Set(v8joint, Nan::New<v8::String>("orientationW").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].orientationW));
 				//body ground
 				if(m_jsBodyFrameV8.bodies[i].joints[j].hasFloorData)
 				{
@@ -1144,7 +1149,12 @@ HRESULT processBodyFrameData(IBodyFrame* pBodyFrame)
 					m_jsBodyFrame.bodies[i].rightHandState = rightHandState;
 					//go through the joints
 					Joint joints[JointType_Count];
+					JointOrientation jointOrientations[JointType_Count];
 					hr = pBody->GetJoints(_countof(joints), joints);
+					if(SUCCEEDED(hr))
+					{
+						hr = pBody->GetJointOrientations(_countof(jointOrientations), jointOrientations);
+					}
 					if (SUCCEEDED(hr))
 					{
 						for (int j = 0; j < _countof(joints); ++j)
@@ -1161,6 +1171,11 @@ HRESULT processBodyFrameData(IBodyFrame* pBodyFrame)
 							m_jsBodyFrame.bodies[i].joints[j].cameraX = joints[j].Position.X;
 							m_jsBodyFrame.bodies[i].joints[j].cameraY = joints[j].Position.Y;
 							m_jsBodyFrame.bodies[i].joints[j].cameraZ = joints[j].Position.Z;
+
+							m_jsBodyFrame.bodies[i].joints[j].orientationX = jointOrientations[j].Orientation.x;
+							m_jsBodyFrame.bodies[i].joints[j].orientationY = jointOrientations[j].Orientation.y;
+							m_jsBodyFrame.bodies[i].joints[j].orientationZ = jointOrientations[j].Orientation.z;
+							m_jsBodyFrame.bodies[i].joints[j].orientationW = jointOrientations[j].Orientation.w;
 
 							m_jsBodyFrame.bodies[i].joints[j].jointType = joints[j].JointType;
 						}
