@@ -21,6 +21,6 @@
   },
   "homepage": "https://github.com/wouterverweirder/kinect2",
   "dependencies": {
-    "nan": "2.0.8"
+    "nan": "^2.0.9"
   }
 }
