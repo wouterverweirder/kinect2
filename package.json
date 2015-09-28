@@ -1,14 +1,21 @@
 {
   "name": "kinect2",
-  "version": "0.0.32",
+  "version": "0.1.0",
   "description": "Nodejs library to access the kinect 2 data from the official MS SDK",
   "main": "./lib/kinect2.js",
   "scripts": {
-    "install": "node tools/install.js"
+    "install": "node-pre-gyp install --fallback-to-build"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/wouterverweirder/kinect2"
+  },
+  "binary": {
+    "module_name": "kinect2",
+    "module_path": "./build/{module_name}/v{version}/{configuration}/{node_abi}-{platform}-{arch}/",
+    "remote_path": "./{module_name}/v{version}/{configuration}/",
+    "package_name": "{node_abi}-{platform}-{arch}.tar.gz",
+    "host": "https://kinect2.s3.amazonaws.com"
   },
   "keywords": [
     "kinect2",
@@ -21,6 +28,16 @@
   },
   "homepage": "https://github.com/wouterverweirder/kinect2",
   "dependencies": {
-    "nan": "^2.0.9"
+    "nan": "^2.0.9",
+    "node-pre-gyp": "^0.6.11"
+  },
+  "bundledDependencies": [
+    "node-pre-gyp"
+  ],
+  "devDependencies": {
+    "async": "^1.4.2",
+    "aws-sdk": "^2.2.4",
+    "jsdom": "^6.5.1",
+    "minimist": "^1.2.0"
   }
 }
