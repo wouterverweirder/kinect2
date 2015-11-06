@@ -2,14 +2,10 @@ var path = require('path'),
 	fs = require('fs'),
 	async = require('async');
 
-var argv = require('minimist')(process.argv.slice(2), {
-	default: {
-		target: '0.30.4',
-		arch: 'x64'
-	}
-});
+var argv;
 
 function init() {
+	createArgv();
 	async.series([
 		createTmpBindingFile,
 		removePreGypInfoFromBindingFile,
@@ -17,6 +13,26 @@ function init() {
 		restoreBindingFile
 	], function(err, result){
 		console.log('all done');
+	});
+}
+
+function createArgv() {
+	var target = '0.30.4';
+	try {
+		var electron = require('electron-prebuilt');
+		var versionFilePath = path.resolve(electron, '..', 'version');
+		var versionFileContent = fs.readFileSync(versionFilePath, 'utf8');
+		if(versionFileContent) {
+			target = versionFileContent;
+		}
+	} catch(exception) {
+	}
+	console.log('build for electron ' + target + ' (' + process.arch + ')');
+	argv = require('minimist')(process.argv.slice(2), {
+		default: {
+			target: target,
+			arch: process.arch
+		}
 	});
 }
 
