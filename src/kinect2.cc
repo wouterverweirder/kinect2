@@ -1022,7 +1022,7 @@ v8::Local<v8::Object> getV8BodyFrame_()
 		Nan::Set(v8body, Nan::New<v8::String>("tracked").ToLocalChecked(), Nan::New<v8::Boolean>(m_jsBodyFrameV8.bodies[i].tracked));
 		if(m_jsBodyFrameV8.bodies[i].tracked)
 		{
-			Nan::Set(v8body, Nan::New<v8::String>("trackingId").ToLocalChecked(), Nan::New<v8::Number>(static_cast<double>(m_jsBodyFrameV8.bodies[i].trackingId)));
+			Nan::Set(v8body, Nan::New<v8::String>("trackingId").ToLocalChecked(), Nan::New<v8::String>(std::to_string(m_jsBodyFrameV8.bodies[i].trackingId)).ToLocalChecked());
 			//hand states
 			Nan::Set(v8body, Nan::New<v8::String>("leftHandState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].leftHandState));
 			Nan::Set(v8body, Nan::New<v8::String>("rightHandState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].rightHandState));
