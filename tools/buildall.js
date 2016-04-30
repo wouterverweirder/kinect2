@@ -10,11 +10,13 @@ var jsdom = require('jsdom'),
 var argv = require('minimist')(process.argv.slice(2));
 
 var nodeExe = process.argv[0];
-var nodeGyp = path.join(nodeExe, '..', 'node_modules', 'npm', 'node_modules', 'node-gyp', 'bin', 'node-gyp.js');
-var nodePreGyp = path.join(nodeExe, '..', 'node_modules', 'node-pre-gyp', 'bin', 'node-pre-gyp');
+var nodeModules = path.resolve(nodeExe, '..', '..', '..', 'bin', 'node_modules');
 
-var buildDir = path.join(__dirname, '..', 'build');
-var nodeBinariesDir = path.join(buildDir, 'node_binaries');
+var nodeGyp = path.resolve(nodeModules, 'node-gyp', 'bin', 'node-gyp.js');
+var nodePreGyp = path.resolve(nodeModules, 'node-pre-gyp', 'bin', 'node-pre-gyp');
+
+var buildDir = path.resolve(__dirname, '..', 'build');
+var nodeBinariesDir = path.resolve(buildDir, 'node_binaries');
 
 var nodeListUrl = 'https://nodejs.org/dist/';
 var iojsListUrl = 'https://iojs.org/dist/';
