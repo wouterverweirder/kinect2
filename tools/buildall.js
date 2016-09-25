@@ -1,6 +1,6 @@
 //build versions (32bit & 64bit) for all supported node versions
 //make sure to have latest version of node-gyp installed aswell (npm install -g node-gyp)
-//use --publish to upload binaries to S3
+//use --publish to upload binaries to Github
 var jsdom = require('jsdom'),
 	https = require('https'),
 	fs = require('fs'),
@@ -10,10 +10,10 @@ var jsdom = require('jsdom'),
 var argv = require('minimist')(process.argv.slice(2));
 
 var nodeExe = process.argv[0];
-var nodeModules = path.resolve(nodeExe, '..', '..', '..', 'bin', 'node_modules');
+var nodeModules = path.resolve(__dirname, '..', 'node_modules');
 
-var nodeGyp = path.resolve(nodeModules, 'node-gyp', 'bin', 'node-gyp.js');
 var nodePreGyp = path.resolve(nodeModules, 'node-pre-gyp', 'bin', 'node-pre-gyp');
+var nodePreGypGithub = path.resolve(nodeModules, 'node-pre-gyp-github', 'bin', 'node-pre-gyp-github');
 
 var buildDir = path.resolve(__dirname, '..', 'build');
 var nodeBinariesDir = path.resolve(buildDir, 'node_binaries');
@@ -186,48 +186,64 @@ function addIoJsVersionsToNodeVersionsObject(callback) {
 	});
 }
 
-function executePreGyp(nodeExe, callback) {
-	var nodePreGypProcess;
+var executeNodeScript = function(nodeExe, arguments, callback) {
+	var nodeScriptProcess;
 	if(publish) {
-		nodePreGypProcess = require('child_process').spawn(nodeExe, [nodePreGyp, 'package', 'publish'], { cwd: path.join(__dirname, '..') });
+		nodeScriptProcess = require('child_process').spawn(nodeExe, arguments, { cwd: path.join(__dirname, '..') });
 	} else {
-		nodePreGypProcess = require('child_process').spawn(nodeExe, [nodePreGyp, 'configure', 'build'], { cwd: path.join(__dirname, '..') });
+		nodeScriptProcess = require('child_process').spawn(nodeExe, arguments, { cwd: path.join(__dirname, '..') });
 	}
-	nodePreGypProcess.stdout.on('data', function(data) {
+	nodeScriptProcess.stdout.on('data', function(data) {
 		data = data.toString().trim();
 		console.log(data);
 	});
-	nodePreGypProcess.stderr.on('data', function(data) {
+	nodeScriptProcess.stderr.on('data', function(data) {
 		data = data.toString().trim();
 		console.log(data);
 	});
-	nodePreGypProcess.on('disconnect', function() {
+	nodeScriptProcess.on('disconnect', function() {
 		console.log('disconnect');
 	});
-	nodePreGypProcess.on('close', function() {
+	nodeScriptProcess.on('close', function() {
 		console.log('close');
 		callback();
 	});
-	nodePreGypProcess.on('exit', function() {
+	nodeScriptProcess.on('exit', function() {
 		console.log('exit');
 	});
-}
+};
 
 function buildAll(versions, callback) {
 	async.forEachOfSeries(versions, function(versionInfo, version, versionsCallback){
+		var nodeBinaryPath32 = path.join(nodeBinariesDir, versionInfo.string, 'ia32', versionInfo.flavor + '.exe');
+		var nodeBinaryPath64 = path.join(nodeBinariesDir, versionInfo.string, 'x64', versionInfo.flavor + '.exe');
 		async.series([
 			function(versionSerieCallback) { mkDirIfNotExists(path.join(nodeBinariesDir, versionInfo.string), versionSerieCallback); },
+
 			function(versionSerieCallback) { mkDirIfNotExists(path.join(nodeBinariesDir, versionInfo.string, 'ia32'), versionSerieCallback); },
-			function(versionSerieCallback) { downloadIfNotExists(path.join(nodeBinariesDir, versionInfo.string, 'ia32', versionInfo.flavor + '.exe'), versionInfo.ia32, versionSerieCallback); },
-			function(versionSerieCallback) { executePreGyp(path.join(nodeBinariesDir, versionInfo.string, 'ia32', versionInfo.flavor + '.exe'), versionSerieCallback); },
+			function(versionSerieCallback) { downloadIfNotExists(nodeBinaryPath32, versionInfo.ia32, versionSerieCallback); },
+
+			function(versionSerieCallback) { executeNodeScript(nodeBinaryPath32, [nodePreGyp, 'configure'], versionSerieCallback); },
+			function(versionSerieCallback) { executeNodeScript(nodeBinaryPath32, [nodePreGyp, 'build'], versionSerieCallback); },
+			function(versionSerieCallback) { executeNodeScript(nodeBinaryPath32, [nodePreGyp, 'package'], versionSerieCallback); },
+			
 			function(versionSerieCallback) { mkDirIfNotExists(path.join(nodeBinariesDir, versionInfo.string, 'x64'), versionSerieCallback); },
-			function(versionSerieCallback) { downloadIfNotExists(path.join(nodeBinariesDir, versionInfo.string, 'x64', versionInfo.flavor + '.exe'), versionInfo.x64, versionSerieCallback); },
-			function(versionSerieCallback) { executePreGyp(path.join(nodeBinariesDir, versionInfo.string, 'x64', versionInfo.flavor + '.exe'), versionSerieCallback); }
+			function(versionSerieCallback) { downloadIfNotExists(nodeBinaryPath64, versionInfo.x64, versionSerieCallback); },
+
+			function(versionSerieCallback) { executeNodeScript(nodeBinaryPath64, [nodePreGyp, 'configure'], versionSerieCallback); },
+			function(versionSerieCallback) { executeNodeScript(nodeBinaryPath64, [nodePreGyp, 'build'], versionSerieCallback); },
+			function(versionSerieCallback) { executeNodeScript(nodeBinaryPath64, [nodePreGyp, 'package'], versionSerieCallback); },
+
+
 		], function(err, results){
 			versionsCallback(err, results)
 		});
 	}, function(err, results) {
-		callback(err, results);
+		if(err || !publish) {
+			callback(err, results);
+			return;
+		}
+		executeNodeScript(nodeExe, [nodePreGypGithub, 'publish'], callback);
 	});
 }
 
