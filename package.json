@@ -12,6 +12,9 @@
     "type": "git",
     "url": "https://github.com/wouterverweirder/kinect2.git"
   },
+  "os": [
+    "win32"
+  ],
   "binary": {
     "module_name": "kinect2",
     "module_path": "./build/{module_name}/v{version}/{configuration}/{node_abi}-{platform}-{arch}/",
