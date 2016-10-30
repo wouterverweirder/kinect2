@@ -1,6 +1,6 @@
 {
   "name": "depth-feed-electron",
-  "version": "0.0.20",
+  "version": "0.1.5",
   "description": "display depth feed in electron app",
   "main": "index.js",
   "scripts": {
@@ -8,8 +8,7 @@
   },
   "author": "Wouter Verweirder <wouter.verweirder@gmail.com>",
   "license": "MIT",
-  "dependencies": {},
-  "devDependencies": {
-    "electron-prebuilt": "^0.30.2"
+  "dependencies": {
+    "electron": "^1.4.4"
   }
 }

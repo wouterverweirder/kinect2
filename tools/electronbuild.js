@@ -16,16 +16,44 @@ function init() {
 	});
 }
 
+//based on https://raw.githubusercontent.com/electron/electron-rebuild/master/src/electron-locater.js
+var locateElectronPrebuilt = function locateElectronPrebuilt() {
+	var possibleModuleNames = ['electron', 'electron-prebuilt', 'electron-prebuilt-compile'];
+  var electronPath = false;
+
+  // Attempt to locate modules by path
+  var foundModule = possibleModuleNames.some(function (moduleName) {
+    electronPath = path.join(__dirname, '..', '..', moduleName);
+    return fs.existsSync(electronPath);
+  });
+
+  // Return a path if we found one
+  if (foundModule) return electronPath;
+
+  // Attempt to locate modules by require
+  foundModule = possibleModuleNames.some(function (moduleName) {
+    try {
+      electronPath = path.join(require.resolve(moduleName), '..');
+    } catch (e) {
+      return false;
+    }
+    return fs.existsSync(electronPath);
+  });
+
+  // Return a path if we found one
+  if (foundModule) return electronPath;
+  return null;
+};
+
 function createArgv() {
 	var target = '0.30.4';
-	try {
-		var electron = require('electron-prebuilt');
-		var versionFilePath = path.resolve(electron, '..', 'version');
-		var versionFileContent = fs.readFileSync(versionFilePath, 'utf8');
-		if(versionFileContent) {
-			target = versionFileContent;
+	var electron = locateElectronPrebuilt();
+	console.log(electron);
+	if(electron) {
+		var electronPackageJSON = JSON.parse(fs.readFileSync(path.resolve(electron, 'package.json')));
+		if(electronPackageJSON) {
+			target = electronPackageJSON.version;
 		}
-	} catch(exception) {
 	}
 	console.log('build for electron ' + target + ' (' + process.arch + ')');
 	argv = require('minimist')(process.argv.slice(2), {
