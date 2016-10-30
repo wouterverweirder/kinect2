@@ -7,7 +7,8 @@
     "install": "node-pre-gyp install --fallback-to-build",
     "buildall": "node tools/buildall.js",
     "buildall:publish": "node tools/buildall.js --publish",
-    "build:electron": "node tools/electronbuild.js"
+    "build:electron": "node tools/electronbuild.js",
+    "echo-node-version-info": "node tools/echo-node-version-info.js"
   },
   "repository": {
     "type": "git",
