@@ -6,7 +6,7 @@ Nodejs library to access the kinect 2 data from the official MS SDK on Windows.
 
 ## Installation
 
-You will need to install [the official Kinect 2 SDK](https://www.microsoft.com/en-us/download/details.aspx?id=44561) before you can use this module.
+You will need to install [the official Kinect 2 SDK](https://www.microsoft.com/en-us/download/details.aspx?id=44561) before you can use this module. You will also need to have Python 2.7 and node-gyp installed.
 
 ### node.js
 
