@@ -46,7 +46,7 @@ var locateElectronPrebuilt = function locateElectronPrebuilt() {
 };
 
 function createArgv() {
-	var target = '0.30.4';
+	var target = '1.8.7';
 	var electron = locateElectronPrebuilt();
 	console.log(electron);
 	if(electron) {

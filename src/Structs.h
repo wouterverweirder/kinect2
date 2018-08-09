@@ -28,6 +28,8 @@ typedef struct _JSJoint
 	float orientationW;
 	//
 	int jointType;
+	//
+	char trackingState;
 } JSJoint;
 
 typedef struct _JSBody

@@ -1054,6 +1054,11 @@ v8::Local<v8::Object> getV8BodyFrame_()
 					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraY").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorCameraY));
 					Nan::Set(v8joint, Nan::New<v8::String>("floorCameraZ").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].floorCameraZ));
 				}
+				//joint type
+				Nan::Set(v8joint, Nan::New<v8::String>("jointType").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].jointType));
+				//tracking state
+				Nan::Set(v8joint, Nan::New<v8::String>("trackingState").ToLocalChecked(), Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].trackingState));
+				//insert in array
 				Nan::Set(v8joints, Nan::New<v8::Number>(m_jsBodyFrameV8.bodies[i].joints[j].jointType), v8joint);
 			}
 			Nan::Set(v8body, Nan::New<v8::String>("joints").ToLocalChecked(), v8joints);
@@ -1178,6 +1183,7 @@ HRESULT processBodyFrameData(IBodyFrame* pBodyFrame)
 							m_jsBodyFrame.bodies[i].joints[j].orientationW = jointOrientations[j].Orientation.w;
 
 							m_jsBodyFrame.bodies[i].joints[j].jointType = joints[j].JointType;
+							m_jsBodyFrame.bodies[i].joints[j].trackingState = joints[j].TrackingState;
 						}
 						//calculate body ground position
 						if(m_includeJointFloorData && m_jsBodyFrame.hasFloorClipPlane)
