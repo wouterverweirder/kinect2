@@ -1902,39 +1902,39 @@ NAN_MODULE_INIT(Init)
 	m_persistentDepthColorPixels.Reset<v8::Object>(Nan::NewBuffer((char *)m_pDepthColorPixelsV8, cDepthWidth * cDepthHeight * sizeof(RGBQUAD)).ToLocalChecked());
 
 	Nan::Set(target, Nan::New<String>("open").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(OpenFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(OpenFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("close").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(CloseFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("openColorReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(OpenColorReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(OpenColorReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("closeColorReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseColorReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(CloseColorReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("openInfraredReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(OpenInfraredReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(OpenInfraredReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("closeInfraredReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseInfraredReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(CloseInfraredReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("openLongExposureInfraredReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(OpenLongExposureInfraredReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(OpenLongExposureInfraredReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("closeLongExposureInfraredReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseLongExposureInfraredReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(CloseLongExposureInfraredReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("openDepthReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(OpenDepthReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(OpenDepthReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("closeDepthReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseDepthReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(CloseDepthReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("openRawDepthReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(OpenRawDepthReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(OpenRawDepthReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("closeRawDepthReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseRawDepthReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(CloseRawDepthReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("openBodyReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(OpenBodyReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(OpenBodyReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("closeBodyReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseBodyReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(CloseBodyReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("openMultiSourceReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(OpenMultiSourceReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(OpenMultiSourceReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("closeMultiSourceReader").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(CloseMultiSourceReaderFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(CloseMultiSourceReaderFunction)).ToLocalChecked());
 	Nan::Set(target, Nan::New<String>("trackPixelsForBodyIndices").ToLocalChecked(),
-		Nan::New<FunctionTemplate>(TrackPixelsForBodyIndicesFunction)->GetFunction());
+		Nan::GetFunction(Nan::New<FunctionTemplate>(TrackPixelsForBodyIndicesFunction)).ToLocalChecked());
 }
 
 NODE_MODULE(kinect2, Init)
