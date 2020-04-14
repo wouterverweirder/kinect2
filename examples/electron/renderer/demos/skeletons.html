@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Kinect2 Example</title>
+    <link rel="stylesheet" href="../assets/vendors/bootstrap-4.3.1-dist/css/bootstrap.css">
+    <link rel="stylesheet" href="../assets/vendors/bootstrap-4.3.1-dist/css/docs.min.css">
+  </head>
+  <body class="container-fluid py-3">
+    <div class="d-flex align-items-baseline justify-content-between">
+      <h1 class="bd-title">Skeletons</h1>
+      <button onclick="require('electron').remote.getCurrentWebContents().openDevTools()">open dev tools</button>
+    </div>
+    <p>
+      This demo shows the body stream in an html canvas element.
+    </p>
+    <div class="mb-3">
+      <canvas id="outputCanvas" width="512" height="424" class="img-fluid"></canvas>
+    </div>
+    <div class="mb-3">
+      <button id="toggleFeedButton" disabled="disabled">Stop Video</button>
+    </div>
+    <script>
+      {
+        const Kinect2 = require('kinect2');
+        const kinect = new Kinect2();
+
+        const canvas = document.getElementById('outputCanvas'),
+          ctx = canvas.getContext('2d');
+
+        const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
+
+        // handstate circle size
+        const HANDSIZE = 20;
+
+        // closed hand state color
+        const HANDCLOSEDCOLOR = "red";
+
+        // open hand state color
+        const HANDOPENCOLOR = "green";
+
+        // lasso hand state color
+        const HANDLASSOCOLOR = "blue";
+
+        const $toggleFeedButton = document.getElementById('toggleFeedButton');
+
+        let feedOpen = false;
+
+        const init = () => {
+          startKinect();
+        };
+
+        const setFeedOpen = (value) => {
+          if(value !== feedOpen) {
+            feedOpen = value;
+            if(feedOpen) {
+              $toggleFeedButton.textContent = 'Stop Video';
+              kinect.openBodyReader();
+            } else {
+              $toggleFeedButton.textContent = 'Start Video';
+              kinect.closeBodyReader();
+            }
+          }
+        }
+
+        const startKinect = () => {
+          if (kinect.open()) {
+            kinect.on('bodyFrame', (bodyFrame) => {
+              drawBodyFrame(bodyFrame);
+            });
+
+            $toggleFeedButton.addEventListener('click', function(){
+              setFeedOpen(!feedOpen);
+            });
+
+            $toggleFeedButton.removeAttribute('disabled');
+
+            setFeedOpen(true);
+          }
+        };
+
+        const drawBodyFrame = bodyFrame => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          let index = 0;
+          bodyFrame.bodies.forEach((body) => {
+            if(body.tracked) {
+              for(const jointType in body.joints) {
+                const joint = body.joints[jointType];
+                if (joint.trackingState > Kinect2.TrackingState.notTracked) {
+                  ctx.fillStyle = colors[index];
+                  let size = 4;
+                  if (joint.trackingState === Kinect2.TrackingState.tracked) {
+                    size = 12;
+                  }
+                  ctx.fillRect(joint.depthX * 512 - size / 2, joint.depthY * 424 - size / 2, size, size);
+                }
+              }
+              //draw hand states
+              updateHandState(body.leftHandState, body.joints[Kinect2.JointType.handLeft]);
+              updateHandState(body.rightHandState, body.joints[Kinect2.JointType.handRight]);
+              index++;
+            }
+          });
+        };
+
+        const updateHandState = (handState, jointPoint) => {
+          switch (handState) {
+            case Kinect2.HandState.closed:
+              drawHand(jointPoint, HANDCLOSEDCOLOR);
+              break;
+
+            case Kinect2.HandState.open:
+              drawHand(jointPoint, HANDOPENCOLOR);
+              break;
+
+            case Kinect2.HandState.lasso:
+              drawHand(jointPoint, HANDLASSOCOLOR);
+              break;
+          }
+        }
+
+        const drawHand = (jointPoint, handColor) => {
+          // draw semi transparent hand cicles
+          ctx.globalAlpha = 0.75;
+          ctx.beginPath();
+          ctx.fillStyle = handColor;
+          ctx.arc(jointPoint.depthX * 512, jointPoint.depthY * 424, HANDSIZE, 0, Math.PI * 2, true);
+          ctx.fill();
+          ctx.closePath();
+          ctx.globalAlpha = 1;
+        }
+
+        // expose the kinect instance to the window object in this demo app to allow the parent window to close it between sessions
+        window.kinect = kinect;
+        init();
+      }
+    </script>
+  </body>
+</html>

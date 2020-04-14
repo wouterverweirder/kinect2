@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Kinect2 Example</title>
+    <link rel="stylesheet" href="../assets/vendors/bootstrap-4.3.1-dist/css/bootstrap.css">
+    <link rel="stylesheet" href="../assets/vendors/bootstrap-4.3.1-dist/css/docs.min.css">
+  </head>
+  <body class="container-fluid py-3">
+    <div class="d-flex align-items-baseline justify-content-between">
+      <h1 class="bd-title">Floor Distance Measure</h1>
+      <button onclick="require('electron').remote.getCurrentWebContents().openDevTools()">open dev tools</button>
+    </div>
+    <p>
+      This demo measures and displays the height of the left hand to the floor.<br />
+      Your Kinect needs to be pointed in an angle so that it can see the floor.
+    </p>
+
+    <canvas id="outputCanvas" width="1920" height="1080" class="img-fluid"></canvas>
+    
+    <script>
+      {
+        const Kinect2 = require('kinect2');
+        const kinect = new Kinect2();
+
+        const $outputCanvas = document.getElementById('outputCanvas'),
+          outputCtx = $outputCanvas.getContext('2d'),
+          outputImageData = outputCtx.createImageData($outputCanvas.width, $outputCanvas.height);
+
+        const init = () => {
+          startKinect();
+        };
+
+        const getClosestBodyIndex = (bodies) => {
+          let closestZ = Number.MAX_VALUE;
+          let closestBodyIndex = -1;
+          for(let i = 0; i < bodies.length; i++) {
+            if(bodies[i].tracked && bodies[i].joints[Kinect2.JointType.spineMid].cameraZ < closestZ) {
+              closestZ = bodies[i].joints[Kinect2.JointType.spineMid].cameraZ;
+              closestBodyIndex = i;
+            }
+          }
+          return closestBodyIndex;
+        };
+
+        const startKinect = () => {
+          if (kinect.open()) {
+            kinect.on('multiSourceFrame', (frame) => {
+              if (frame.color && frame.color.buffer) {
+                renderColorFrame(outputCtx, outputImageData, frame.color.buffer);
+              }
+              const closestBodyIndex = getClosestBodyIndex(frame.body.bodies);
+              if(closestBodyIndex > -1 && frame.body.floorClipPlane) {
+                //get position of left hand
+                const joint = frame.body.bodies[closestBodyIndex].joints[Kinect2.JointType.handLeft];
+
+                //https://social.msdn.microsoft.com/Forums/en-US/594cf9ed-3fa6-4700-872c-68054cac5bf0/angle-of-kinect-device-and-effect-on-xyz-positional-data?forum=kinectv2sdk
+                const cameraAngleRadians= Math.atan(frame.body.floorClipPlane.z / frame.body.floorClipPlane.y);
+                const cosCameraAngle = Math.cos(cameraAngleRadians);
+                const sinCameraAngle = Math.sin(cameraAngleRadians);
+                const yprime = joint.cameraY * cosCameraAngle + joint.cameraZ * sinCameraAngle;
+                const jointDistanceFromFloor = frame.body.floorClipPlane.w + yprime;
+
+                //show height in canvas
+                outputCtx.beginPath();
+                outputCtx.fillStyle = "red";
+                outputCtx.arc(joint.colorX * 1920, joint.colorY * 1080, 10, 0, Math.PI * 2, true);
+                outputCtx.fill();
+                outputCtx.closePath();
+                outputCtx.font = "72px sans";
+                outputCtx.fillText(jointDistanceFromFloor.toFixed(2) + "m", 20 + joint.colorX * 1920, joint.colorY * 1080);
+              }
+            });
+
+            kinect.openMultiSourceReader({
+              frameTypes: Kinect2.FrameType.color | Kinect2.FrameType.depth | Kinect2.FrameType.body
+            });
+          }
+        };
+
+        const renderColorFrame = (ctx, canvasImageData, newPixelData) => {
+          const pixelArray = canvasImageData.data;
+          for (let i = 0; i < canvasImageData.data.length; i++) {
+            pixelArray[i] = newPixelData[i];
+          }
+          ctx.putImageData(canvasImageData, 0, 0);
+        };
+
+        // expose the kinect instance to the window object in this demo app to allow the parent window to close it between sessions
+        window.kinect = kinect;
+        init();
+      }
+    </script>
+  </body>
+</html>

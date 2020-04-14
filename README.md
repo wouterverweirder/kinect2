@@ -1,59 +1,46 @@
-# Node-Kinect2
+# Kinect2 Library for Node / Electron
 
-Nodejs library to access the kinect 2 data from the official MS SDK on Windows.
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=NUZP3U3QZEQV2&currency_code=EUR&source=url)
 
-![Screenshot](https://raw.githubusercontent.com/wouterverweirder/node-kinect2/master/node-kinect2-skeleton.png)
+This library enables you to use the Kinect v2 in your nodejs or electron apps.
+
+![screenshot of multi stream demo](examples/screenshots/multi-source-reader.png)
+
+Features:
+
+- get rgb camera feed
+- get depth feed
+- get ir feed
+- point cloud (greyscale and colored)
+- get skeleton joints (2d and 3d)
+- user masking
 
 ## Installation
 
 You will need to install [the official Kinect 2 SDK](https://www.microsoft.com/en-us/download/details.aspx?id=44561) before you can use this module.
 
-### node.js
-
-You need at least node version 0.12 to use this module. Older versions do not work. Just use npm install:
-
-``` bash
-npm install kinect2
-```
-
-### electron
-
-If you want to use this module inside an electron application, you will need to [build this module for electron usage](https://github.com/atom/electron/blob/master/docs/tutorial/using-native-node-modules.md). I've provided a build script which does just that.
-
-You will need to have node-gyp & it's dependencies installed (https://github.com/nodejs/node-gyp) before you can continue.
-
-``` bash
-# cd into the directory of kinect2
-cd node_modules\kinect2
-# run my build script to create a native binary for electron
-npm run build:electron
-```
-
-## Usage
+Just npm install like you would do with any regular module. 
 
 ```
-var Kinect2 = require('kinect2');
-
-var kinect = new Kinect2();
-
-if(kinect.open()) {
-	console.log("Kinect Opened");
-	//listen for body frames
-	kinect.on('bodyFrame', function(bodyFrame){
-		for(var i = 0;  i < bodyFrame.bodies.length; i++) {
-			if(bodyFrame.bodies[i].tracked) {
-				console.log(bodyFrame.bodies[i]);
-			}
-		}
-	});
-
-	//request body frames
-	kinect.openBodyReader();
-
-	//close the kinect after 5 seconds
-	setTimeout(function(){
-		kinect.close();
-		console.log("Kinect Closed");
-	}, 5000);
-}
+$ npm install kinect2
 ```
+
+There are no precompiled binaries yet, so you need to have [node-gyp installed on your system](https://github.com/nodejs/node-gyp).
+
+## Examples
+
+There are nodejs and electron examples in the examples/ folder of this repo. To run them, execute npm install and npm start:
+
+```
+$ cd examples/electron
+$ npm install
+$ npm start
+```
+
+The electron examples have the javascript code inside the html files. You can find these html files in [examples/electron/renderer/demos](examples/electron/renderer/demos).
+
+## Donate
+
+Like this library? Always welcome to buy me a beer 🍺
+
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=NUZP3U3QZEQV2&currency_code=EUR&source=url)

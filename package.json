@@ -1,29 +1,8 @@
 {
   "name": "kinect2",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "Nodejs library to access the kinect 2 data from the official MS SDK",
-  "main": "./lib/kinect2.js",
-  "scripts": {
-    "install": "node-pre-gyp install --fallback-to-build",
-    "buildall": "node tools/buildall.js",
-    "buildall:publish": "node tools/buildall.js --publish",
-    "build:electron": "node tools/electronbuild.js",
-    "echo-node-version-info": "node tools/echo-node-version-info.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/wouterverweirder/kinect2.git"
-  },
-  "os": [
-    "win32"
-  ],
-  "binary": {
-    "module_name": "kinect2",
-    "module_path": "./build/{module_name}/v{version}/{configuration}/{node_abi}-{platform}-{arch}/",
-    "package_name": "{node_abi}-{platform}-{arch}.tar.gz",
-    "host": "https://github.com/wouterverweirder/kinect2/releases/download/",
-    "remote_path": "{version}"
-  },
+  "repository": "https://github.com/wouterverweirder/kinect2",
   "keywords": [
     "kinect2",
     "sdk"
@@ -34,17 +13,19 @@
     "url": "https://github.com/wouterverweirder/kinect2/issues"
   },
   "homepage": "https://github.com/wouterverweirder/kinect2",
+  "main": "lib/kinect2.js",
   "dependencies": {
-    "nan": "^2.13.2",
-    "node-pre-gyp": "^0.6.11"
+    "bindings": "~1.2.1",
+    "node-addon-api": "^1.0.0"
   },
-  "bundledDependencies": [
-    "node-pre-gyp"
-  ],
+  "engines": {
+    "node": ">= 10.6.0"
+  },
+  "scripts": {
+    "prepublishOnly": "rimraf ./examples/**/node_modules"
+  },
+  "gypfile": true,
   "devDependencies": {
-    "async": "^1.4.2",
-    "jsdom": "^6.5.1",
-    "minimist": "^1.2.0",
-    "node-pre-gyp-github": "^1.3.1"
+    "rimraf": "^3.0.0"
   }
 }

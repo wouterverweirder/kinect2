@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html class="h-100 mh-100">
+  <head>
+    <meta charset="UTF-8">
+    <title>Kinect2 Examples</title>
+    <link rel="stylesheet" href="assets/vendors/bootstrap-4.3.1-dist/css/bootstrap.css">
+    <link rel="stylesheet" href="assets/vendors/bootstrap-4.3.1-dist/css/docs.min.css">
+    <style>
+    .bd-sidebar {
+      top: 0;
+      height: auto;
+    }
+    </style>
+  </head>
+  <body class="container-fluid h-100 mh-100 overflow-hidden">
+    <div class="row h-100 mh-100">
+      <div class="col-3 bd-sidebar">
+        <nav class="bd-links" style="max-height: 100vh;">
+          <div class="bd-toc-item">
+            <h2 class="h3 pl-4">Demos</h2>
+          </div>
+          <div class="bd-toc-item active">
+            <ul class="nav bd-sidenav">
+              <li><a href="demos/color-reader.html" target="viewer">color reader</a></li>
+              <li><a href="demos/infrared-reader.html" target="viewer">infrared reader</a></li>
+              <li><a href="demos/long-exposure-infrared-reader.html" target="viewer">long exposure infrared reader</a></li>
+              <li><a href="demos/depth-reader.html" target="viewer">depth reader</a></li>
+              <li><a href="demos/point-cloud-greyscale.html" target="viewer">point cloud (greyscale)</a></li>
+              <li><a href="demos/point-cloud-color.html" target="viewer">point cloud (color)</a></li>
+              <li><a href="demos/skeletons.html" target="viewer">skeletons</a></li>
+              <li><a href="demos/multi-source-reader.html" target="viewer">multi source reader</a></li>
+              <li><a href="demos/greenkey.html" target="viewer">greenkey</a></li>
+              <li><a href="demos/floor-distance-measure.html" target="viewer">floor distance measure</a></li>
+              <li><a href="demos/scale-user.html" target="viewer">scale user</a></li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+      <webview class="col pr-0" id="viewer" name="viewer" nodeintegration preload="./demo-preload.js">
+      </webview>
+    </div>
+    <script>
+    {
+      // show demo links in the webview
+      const $viewer = document.getElementById('viewer');
+      const demoLinks = Array.from(document.querySelectorAll('[target="viewer"]'));
+
+      const timeOut = ms => {
+        return new Promise(resolve => {
+          setTimeout(() => resolve(), ms);
+        });
+      };
+
+      const loadDemo = url => {
+        // show a preloader first, to allow some time for previous demo to shut down
+        let demoPromise = Promise.resolve();
+        if ($viewer.getWebContents) {
+          demoPromise = demoPromise.then(() => {
+            return new Promise((resolve) => {
+              const contents = $viewer.getWebContents();
+              contents.once('ipc-message', (event, channel) => {
+                // kinect is closed now, load the next demo
+                console.log(channel);
+                resolve();
+              });
+              contents.send('close-kinect');
+            });
+          });
+        }
+        demoPromise.then(() => {
+          $viewer.src = url;
+        });
+      };
+
+      loadDemo(demoLinks[0].href);
+
+      demoLinks.forEach(link => {
+        link.addEventListener('click', e => {
+          e.preventDefault();
+          loadDemo(link.href);
+        });
+      });
+    }
+    </script>
+  </body>
+</html>

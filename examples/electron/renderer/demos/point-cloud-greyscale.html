@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Kinect2 Example</title>
+    <link rel="stylesheet" href="../assets/vendors/bootstrap-4.3.1-dist/css/bootstrap.css">
+    <link rel="stylesheet" href="../assets/vendors/bootstrap-4.3.1-dist/css/docs.min.css">
+  </head>
+  <body class="container-fluid py-3">
+    <div class="d-flex align-items-baseline justify-content-between">
+      <h1 class="bd-title">Point Cloud (Greyscale)</h1>
+      <button onclick="require('electron').remote.getCurrentWebContents().openDevTools()">open dev tools</button>
+    </div>
+    <p>
+      This demo shows the greyscale point cloud in a three.js 3D environment.
+    </p>
+    <div class="embed-responsive embed-responsive-4by3 mb-3">
+      <canvas class="embed-responsive-item" id="outputCanvas"></canvas>
+    </div>
+    <div class="row">
+      <div class="col col-auto">Renderer: <div id="statsRenderer"></div></div>
+      <div class="col col-auto">Kinect: <div id="statsKinect"></div></div>
+    </div>
+    
+    <script src="../assets/vendors/stats.min.js"></script>
+    <script src="../assets/vendors/three.js/build/three.js"></script>
+    <script src="../assets/vendors/three.js/examples/js/controls/OrbitControls.js"></script>
+    <script>
+      {
+        const statsRenderer = new Stats();
+        statsRenderer.dom.style.cssText = '';
+        document.getElementById('statsRenderer').appendChild( statsRenderer.dom );
+        const statsKinect = new Stats();
+        statsKinect.dom.style.cssText = '';
+        document.getElementById('statsKinect').appendChild( statsKinect.dom );
+
+        const Kinect2 = require('kinect2');
+        const kinect = new Kinect2();
+
+        const canvas = document.getElementById('outputCanvas');
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+
+        const renderer = new THREE.WebGLRenderer({
+          canvas
+        });
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        const scene = new THREE.Scene();
+        
+        const camera = new THREE.PerspectiveCamera( 30, canvas.clientWidth / canvas.clientHeight, 1, 10000 );
+        camera.position.set(0, 0, 2000);
+        camera.lookAt(0, 0, 0);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        
+        const geom = new THREE.Geometry();
+        const material = new THREE.PointsMaterial();
+
+        const DEPTH_WIDTH = 512;
+        const DEPTH_HEIGHT = 424;
+        const numPoints = DEPTH_WIDTH * DEPTH_HEIGHT;
+        for (var i = 0; i < numPoints; i++) {
+          const x = (i % DEPTH_WIDTH) - DEPTH_WIDTH * 0.5;
+          const y = DEPTH_HEIGHT / 2 - Math.floor(i / DEPTH_WIDTH);
+          const particle = new THREE.Vector3(x, y, 0);
+          geom.vertices.push(particle);
+        }
+
+        const cloud = new THREE.Points(geom, material);
+        scene.add(cloud);
+
+        if(kinect.open()) {
+          kinect.on('rawDepthFrame', (depthBuffer) => {
+            const nDepthMinReliableDistance = 500;
+            const nDepthMaxDistance = 4500;
+            const mapDepthToByte = nDepthMaxDistance / 256;
+            let j = 0;
+            for(let i = 0; i < depthBuffer.length; i+=2) {
+              let depth = (depthBuffer[i+1] << 8) + depthBuffer[i]; //get uint16 data from buffer
+              if (depth <= nDepthMinReliableDistance || depth >= nDepthMaxDistance) depth = Number.MAX_VALUE; //push them far far away so we don't see them
+              geom.vertices[j].z = (nDepthMaxDistance - depth) - 2000;
+              j++;
+            }
+            geom.verticesNeedUpdate = true;
+          });
+
+          kinect.openRawDepthReader();
+        }
+
+        const resize = () => {
+          renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+          camera.aspect = canvas.clientWidth / canvas.clientHeight;
+          camera.updateProjectionMatrix();
+        };
+        window.addEventListener('resize', resize);
+
+        const animate = () => {
+          statsRenderer.update();
+          requestAnimationFrame( animate );
+          renderer.render( scene, camera );
+        }
+
+        // expose the kinect instance to the window object in this demo app to allow the parent window to close it between sessions
+        window.kinect = kinect;
+        animate();
+      }
+    </script>
+  </body>
+</html>

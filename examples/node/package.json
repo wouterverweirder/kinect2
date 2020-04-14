@@ -1,0 +1,9 @@
+{
+  "name": "kinect2-nodejs-demos",
+  "version": "1.0.0",
+  "author": "Wouter Verweirder",
+  "license": "MIT",
+  "devDependencies": {
+    "kinect2": "file:../../"
+  }
+}
