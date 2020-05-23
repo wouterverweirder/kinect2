@@ -37,15 +37,15 @@
           startKinect();
         };
 
-        const setFeedOpen = (value) => {
+        const setFeedOpen = async (value) => {
           if(value !== feedOpen) {
             feedOpen = value;
             if(feedOpen) {
-              $toggleFeedButton.textContent = 'Stop Video';
               kinect.openDepthReader();
+              $toggleFeedButton.textContent = 'Stop Video';
             } else {
+              await kinect.closeDepthReader();
               $toggleFeedButton.textContent = 'Start Video';
-              kinect.closeDepthReader();
             }
           }
         }

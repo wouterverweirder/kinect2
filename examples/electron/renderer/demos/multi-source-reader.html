@@ -50,17 +50,17 @@
           startKinect();
         };
 
-        const setFeedOpen = (value) => {
+        const setFeedOpen = async (value) => {
           if(value !== feedOpen) {
             feedOpen = value;
             if(feedOpen) {
-              $toggleFeedButton.textContent = 'Stop Video';
               kinect.openMultiSourceReader({
                 frameTypes: Kinect2.FrameType.color | Kinect2.FrameType.depth | Kinect2.FrameType.body
               });
+              $toggleFeedButton.textContent = 'Stop Video';
             } else {
+              await kinect.closeMultiSourceReader();
               $toggleFeedButton.textContent = 'Start Video';
-              kinect.closeMultiSourceReader();
             }
           }
         }

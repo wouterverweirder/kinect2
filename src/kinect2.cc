@@ -50,6 +50,7 @@ std::thread               m_tColorThread;
 std::mutex                m_mColorReaderMutex;
 bool                      m_bColorThreadRunning = false;
 Napi::ThreadSafeFunction  m_tsfnColor;
+std::mutex                m_mColorThreadJoinedMutex;
 
 float                     m_fColorHorizontalFieldOfView;
 float                     m_fColorVerticalFieldOfView;
@@ -63,6 +64,7 @@ std::thread               m_tInfraredThread;
 std::mutex                m_mInfraredReaderMutex;
 bool                      m_bInfraredThreadRunning = false;
 Napi::ThreadSafeFunction  m_tsfnInfrared;
+std::mutex                m_mInfraredThreadJoinedMutex;
 
 float                     m_fInfraredHorizontalFieldOfView;
 float                     m_fInfraredVerticalFieldOfView;
@@ -76,6 +78,7 @@ std::thread               m_tLongExposureInfraredThread;
 std::mutex                m_mLongExposureInfraredReaderMutex;
 bool                      m_bLongExposureInfraredThreadRunning = false;
 Napi::ThreadSafeFunction  m_tsfnLongExposureInfrared;
+std::mutex                m_mLongExposureInfraredThreadJoinedMutex;
 
 float                     m_fLongExposureInfraredHorizontalFieldOfView;
 float                     m_fLongExposureInfraredVerticalFieldOfView;
@@ -89,6 +92,7 @@ std::thread               m_tDepthThread;
 std::mutex                m_mDepthReaderMutex;
 bool                      m_bDepthThreadRunning = false;
 Napi::ThreadSafeFunction  m_tsfnDepth;
+std::mutex                m_mDepthThreadJoinedMutex;
 
 float                     m_fDepthHorizontalFieldOfView;
 float                     m_fDepthVerticalFieldOfView;
@@ -102,18 +106,21 @@ std::thread               m_tRawDepthThread;
 std::mutex                m_mRawDepthReaderMutex;
 bool                      m_bRawDepthThreadRunning = false;
 Napi::ThreadSafeFunction  m_tsfnRawDepth;
+std::mutex                m_mRawDepthThreadJoinedMutex;
 
 // Body
 std::thread               m_tBodyThread;
 std::mutex                m_mBodyReaderMutex;
 bool                      m_bBodyThreadRunning = false;
 Napi::ThreadSafeFunction  m_tsfnBody;
+std::mutex                m_mBodyThreadJoinedMutex;
 
 // MultiSource
 std::thread               m_tMultiSourceThread;
 std::mutex                m_mMultiSourceReaderMutex;
 bool                      m_bMultiSourceThreadRunning = false;
 Napi::ThreadSafeFunction  m_tsfnMultiSource;
+std::mutex                m_mMultiSourceThreadJoinedMutex;
 
 bool                      m_includeJointFloorData = false;
 
@@ -131,6 +138,29 @@ void stopReader(
   mutex->unlock();
   SafeRelease(pInterfaceToRelease);
 }
+
+class WaitForTheadJoinWorker : public Napi::AsyncWorker {
+  public:
+    WaitForTheadJoinWorker(Napi::Function& callback, std::mutex * threadJoinedMutex)
+    : AsyncWorker(callback) {
+      this->threadJoinedMutex = threadJoinedMutex;
+    }
+
+    ~WaitForTheadJoinWorker() {}
+  // This code will be executed on the worker thread
+  void Execute() override {
+    this->threadJoinedMutex->lock();
+  }
+
+  void OnOK() override {
+    this->threadJoinedMutex->unlock();
+    Napi::HandleScope scope(Env());
+    Callback().Call({Env().Null(), Napi::String::New(Env(), "OK")});
+  }
+
+  private:
+    std::mutex * threadJoinedMutex;
+};
 
 Napi::Value MethodOpen(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -156,15 +186,7 @@ Napi::Value MethodClose(const Napi::CallbackInfo& info) {
 
   printf("[kinect2.cc] MethodClose\n");
 
-  // stop all readers
-  stopReader(&m_mColorReaderMutex, &m_bColorThreadRunning, &m_tColorThread, m_pColorFrameReader);
-  stopReader(&m_mInfraredReaderMutex, &m_bInfraredThreadRunning, &m_tInfraredThread, m_pInfraredFrameReader);
-  stopReader(&m_mLongExposureInfraredReaderMutex, &m_bLongExposureInfraredThreadRunning, &m_tLongExposureInfraredThread, m_pLongExposureInfraredFrameReader);
-  stopReader(&m_mDepthReaderMutex, &m_bDepthThreadRunning, &m_tDepthThread, m_pDepthFrameReader);
-  stopReader(&m_mRawDepthReaderMutex, &m_bRawDepthThreadRunning, &m_tRawDepthThread, m_pRawDepthFrameReader);
-  stopReader(&m_mBodyReaderMutex, &m_bBodyThreadRunning, &m_tBodyThread, m_pBodyFrameReader);
-  
-  printf("[kinect2.cc] readers stopped\n");
+  // all readers will be stopped by the js context by now
 
   SafeRelease(m_pCoordinateMapper);
   if (m_pKinectSensor)
@@ -721,9 +743,11 @@ Napi::Value MethodOpenColorReader(const Napi::CallbackInfo& info) {
       1,                                // Only one thread will use this initially
       []( Napi::Env ) {                 // Finalizer used to clean threads up
         m_tColorThread.join();
+        m_mColorThreadJoinedMutex.unlock();
         printf("[kinect2.cc] color thread joined\n");
       });
 
+    m_mColorThreadJoinedMutex.lock();
     m_tColorThread = std::thread( [] {
       
       auto callback = []( Napi::Env env, Napi::Function jsCallback, RGBQUAD* pixelsRef ) {
@@ -780,6 +804,9 @@ Napi::Value MethodOpenColorReader(const Napi::CallbackInfo& info) {
 Napi::Value MethodCloseColorReader(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   stopReader(&m_mColorReaderMutex, &m_bColorThreadRunning, &m_tColorThread, m_pColorFrameReader);
+  Napi::Function cb = info[0].As<Napi::Function>();
+  WaitForTheadJoinWorker* wk = new WaitForTheadJoinWorker(cb, &m_mColorThreadJoinedMutex);
+  wk->Queue();
   return info.Env().Undefined();
 }
 
@@ -819,9 +846,11 @@ Napi::Value MethodOpenInfraredReader(const Napi::CallbackInfo& info) {
       1,                                // Only one thread will use this initially
       []( Napi::Env ) {                 // Finalizer used to clean threads up
         m_tInfraredThread.join();
+        m_mInfraredThreadJoinedMutex.unlock();
         printf("[kinect2.cc] ir thread joined\n");
       });
 
+    m_mInfraredThreadJoinedMutex.lock();
     m_tInfraredThread = std::thread( [] {
       
       auto callback = []( Napi::Env env, Napi::Function jsCallback, char* pixelsRef ) {
@@ -878,6 +907,9 @@ Napi::Value MethodOpenInfraredReader(const Napi::CallbackInfo& info) {
 Napi::Value MethodCloseInfraredReader(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   stopReader(&m_mInfraredReaderMutex, &m_bInfraredThreadRunning, &m_tInfraredThread, m_pInfraredFrameReader);
+  Napi::Function cb = info[0].As<Napi::Function>();
+  WaitForTheadJoinWorker* wk = new WaitForTheadJoinWorker(cb, &m_mInfraredThreadJoinedMutex);
+  wk->Queue();
   return info.Env().Undefined();
 }
 
@@ -917,9 +949,11 @@ Napi::Value MethodOpenLongExposureInfraredReader(const Napi::CallbackInfo& info)
       1,                                // Only one thread will use this initially
       []( Napi::Env ) {                 // Finalizer used to clean threads up
         m_tLongExposureInfraredThread.join();
+        m_mLongExposureInfraredThreadJoinedMutex.unlock();
         printf("[kinect2.cc] long ir thread joined\n");
       });
 
+    m_mLongExposureInfraredThreadJoinedMutex.lock();
     m_tLongExposureInfraredThread = std::thread( [] {
       
       auto callback = []( Napi::Env env, Napi::Function jsCallback, char* pixelsRef ) {
@@ -976,6 +1010,9 @@ Napi::Value MethodOpenLongExposureInfraredReader(const Napi::CallbackInfo& info)
 Napi::Value MethodCloseLongExposureInfraredReader(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   stopReader(&m_mLongExposureInfraredReaderMutex, &m_bLongExposureInfraredThreadRunning, &m_tLongExposureInfraredThread, m_pLongExposureInfraredFrameReader);
+  Napi::Function cb = info[0].As<Napi::Function>();
+  WaitForTheadJoinWorker* wk = new WaitForTheadJoinWorker(cb, &m_mLongExposureInfraredThreadJoinedMutex);
+  wk->Queue();
   return info.Env().Undefined();
 }
 
@@ -1015,9 +1052,11 @@ Napi::Value MethodOpenDepthReader(const Napi::CallbackInfo& info) {
       1,                                // Only one thread will use this initially
       []( Napi::Env ) {                 // Finalizer used to clean threads up
         m_tDepthThread.join();
+        m_mDepthThreadJoinedMutex.unlock();
         printf("[kinect2.cc] depth thread joined\n");
       });
 
+    m_mDepthThreadJoinedMutex.lock();
     m_tDepthThread = std::thread( [] {
       
       auto callback = []( Napi::Env env, Napi::Function jsCallback, char* pixelsRef ) {
@@ -1074,6 +1113,9 @@ Napi::Value MethodOpenDepthReader(const Napi::CallbackInfo& info) {
 Napi::Value MethodCloseDepthReader(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   stopReader(&m_mDepthReaderMutex, &m_bDepthThreadRunning, &m_tDepthThread, m_pDepthFrameReader);
+  Napi::Function cb = info[0].As<Napi::Function>();
+  WaitForTheadJoinWorker* wk = new WaitForTheadJoinWorker(cb, &m_mDepthThreadJoinedMutex);
+  wk->Queue();
   return info.Env().Undefined();
 }
 
@@ -1113,9 +1155,11 @@ Napi::Value MethodOpenRawDepthReader(const Napi::CallbackInfo& info) {
       1,                                // Only one thread will use this initially
       []( Napi::Env ) {                 // Finalizer used to clean threads up
         m_tRawDepthThread.join();
+        m_mRawDepthThreadJoinedMutex.unlock();
         printf("[kinect2.cc] raw depth thread joined\n");
       });
 
+    m_mRawDepthThreadJoinedMutex.lock();
     m_tRawDepthThread = std::thread( [] {
       
       auto callback = []( Napi::Env env, Napi::Function jsCallback, UINT16* pixelsRef ) {
@@ -1172,6 +1216,9 @@ Napi::Value MethodOpenRawDepthReader(const Napi::CallbackInfo& info) {
 Napi::Value MethodCloseRawDepthReader(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   stopReader(&m_mRawDepthReaderMutex, &m_bRawDepthThreadRunning, &m_tRawDepthThread, m_pRawDepthFrameReader);
+  Napi::Function cb = info[0].As<Napi::Function>();
+  WaitForTheadJoinWorker* wk = new WaitForTheadJoinWorker(cb, &m_mRawDepthThreadJoinedMutex);
+  wk->Queue();
   return info.Env().Undefined();
 }
 
@@ -1211,9 +1258,11 @@ Napi::Value MethodOpenBodyReader(const Napi::CallbackInfo& info) {
       1,                                // Only one thread will use this initially
       []( Napi::Env ) {                 // Finalizer used to clean threads up
         m_tBodyThread.join();
+        m_mBodyThreadJoinedMutex.unlock();
         printf("[kinect2.cc] Body thread joined\n");
       });
 
+    m_mBodyThreadJoinedMutex.lock();
     m_tBodyThread = std::thread( [] {
       
       auto callback = []( Napi::Env env, Napi::Function jsCallback ) {
@@ -1272,6 +1321,9 @@ Napi::Value MethodOpenBodyReader(const Napi::CallbackInfo& info) {
 Napi::Value MethodCloseBodyReader(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   stopReader(&m_mBodyReaderMutex, &m_bBodyThreadRunning, &m_tBodyThread, m_pBodyFrameReader);
+  Napi::Function cb = info[0].As<Napi::Function>();
+  WaitForTheadJoinWorker* wk = new WaitForTheadJoinWorker(cb, &m_mBodyThreadJoinedMutex);
+  wk->Queue();
   return info.Env().Undefined();
 }
 
@@ -1373,9 +1425,11 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
       1,                                // Only one thread will use this initially
       []( Napi::Env ) {                 // Finalizer used to clean threads up
         m_tMultiSourceThread.join();
+        m_mMultiSourceThreadJoinedMutex.unlock();
         printf("[kinect2.cc] MultiSource thread joined\n");
       });
 
+    m_mMultiSourceThreadJoinedMutex.lock();
     m_tMultiSourceThread = std::thread( [] {
       
       auto callback = []( Napi::Env env, Napi::Function jsCallback ) {
@@ -1793,6 +1847,9 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
 Napi::Value MethodCloseMultiSourceReader(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   stopReader(&m_mMultiSourceReaderMutex, &m_bMultiSourceThreadRunning, &m_tMultiSourceThread, m_pMultiSourceFrameReader);
+  Napi::Function cb = info[0].As<Napi::Function>();
+  WaitForTheadJoinWorker* wk = new WaitForTheadJoinWorker(cb, &m_mMultiSourceThreadJoinedMutex);
+  wk->Queue();
   return info.Env().Undefined();
 }
 
