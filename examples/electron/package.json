@@ -8,7 +8,7 @@
   "author": "Wouter Verweirder",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^7.2.1",
+    "electron": "^7.2.4",
     "kinect2": "file:../../"
   }
 }
