@@ -25,8 +25,6 @@ Just npm install like you would do with any regular module.
 $ npm install kinect2
 ```
 
-There are no precompiled binaries yet, so you need to have [node-gyp installed on your system](https://github.com/nodejs/node-gyp).
-
 ## Examples
 
 There are nodejs and electron examples in the examples/ folder of this repo. To run them, execute npm install and npm start:
