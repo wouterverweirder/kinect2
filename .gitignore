@@ -2,6 +2,8 @@ Thumbs.db
 build/
 .node_pre_gyprc
 .vscode/
+build-tmp*/
+lib/binding/
 
 # Ignore the downloaded SDK
 /sdk

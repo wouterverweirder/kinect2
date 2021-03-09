@@ -1,6 +1,6 @@
 {
   "name": "kinect2",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Nodejs library to access the kinect 2 data from the official MS SDK",
   "repository": "https://github.com/wouterverweirder/kinect2",
   "keywords": [
@@ -15,16 +15,30 @@
   "homepage": "https://github.com/wouterverweirder/kinect2",
   "main": "lib/kinect2.js",
   "dependencies": {
+    "@mapbox/node-pre-gyp": "^1.0.1",
     "bindings": "~1.2.1",
     "node-addon-api": "^1.0.0"
   },
   "engines": {
-    "node": ">= 10.6.0"
+    "node": ">= 10.16.0"
   },
   "scripts": {
+    "install": "node-pre-gyp install --fallback-to-build",
+    "build": "npm install --build-from-source",
+    "package": "node-pre-gyp package",
     "prepublishOnly": "rimraf ./examples/**/node_modules"
   },
   "gypfile": true,
+  "binary": {
+    "module_name": "kinect2",
+    "module_path": "./lib/binding/napi-v{napi_build_version}",
+    "remote_path": "{version}",
+    "package_name": "{platform}-{arch}-napi-v{napi_build_version}.tar.gz",
+    "host": "https://github.com/wouterverweirder/kinect2/releases/download/",
+    "napi_versions": [
+      4
+    ]
+  },
   "devDependencies": {
     "rimraf": "^3.0.0"
   }
