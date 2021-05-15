@@ -15,6 +15,8 @@ Features:
 - get skeleton joints (2d and 3d)
 - user masking
 
+Check out [my kinect-azure library](https://github.com/wouterverweirder/kinect-azure) for the Azure Kinect sensor.
+
 ## Installation
 
 You will need to install [the official Kinect 2 SDK](https://www.microsoft.com/en-us/download/details.aspx?id=44561) before you can use this module.
