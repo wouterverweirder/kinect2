@@ -1,5 +1,7 @@
 Thumbs.db
-build/
+/prebuilds
+/build
+.prebuildrc
 .node_pre_gyprc
 .vscode/
 build-tmp*/

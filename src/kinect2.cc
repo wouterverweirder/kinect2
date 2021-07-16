@@ -1,3 +1,4 @@
+#include <cmath>
 #include <thread>
 #include <mutex>
 #include <napi.h>
