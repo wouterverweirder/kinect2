@@ -34,7 +34,7 @@
     "module_name": "kinect2",
     "module_path": "./lib/binding/napi-v4",
     "remote_path": "v{version}",
-    "package_name": "kinect-azure-v{version}-napi-v4-{platform}-{arch}.tar.gz",
+    "package_name": "kinect2-v{version}-napi-v4-{platform}-{arch}.tar.gz",
     "host": "https://github.com/wouterverweirder/kinect2/releases/download/",
     "napi_versions": [
       4
