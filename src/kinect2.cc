@@ -16,6 +16,8 @@ IDepthFrameReader*                  m_pRawDepthFrameReader = NULL;
 IBodyFrameReader*                    m_pBodyFrameReader = NULL;
 IMultiSourceFrameReader*            m_pMultiSourceFrameReader = NULL;
 
+Napi::ObjectReference   m_v8ObjectReference;
+
 RGBQUAD*                m_pColorPixels = new RGBQUAD[cColorWidth * cColorHeight];
 RGBQUAD*                m_pColorPixelsV8 = new RGBQUAD[cColorWidth * cColorHeight];
 char*                   m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
@@ -756,8 +758,7 @@ Napi::Value MethodOpenColorReader(const Napi::CallbackInfo& info) {
           return;
         }
         m_mColorReaderMutex.lock();
-        Napi::Buffer<RGBQUAD> imageData = Napi::Buffer<RGBQUAD>::New(env, pixelsRef, cColorWidth * cColorHeight);
-        jsCallback.Call( { imageData } );
+        jsCallback.Call( { m_v8ObjectReference.Get("colorBuffer") } );
         m_mColorReaderMutex.unlock();
       };
 
@@ -859,8 +860,7 @@ Napi::Value MethodOpenInfraredReader(const Napi::CallbackInfo& info) {
           return;
         }
         m_mInfraredReaderMutex.lock();
-        Napi::Buffer<char> imageData = Napi::Buffer<char>::New(env, pixelsRef, cInfraredWidth * cInfraredHeight);
-        jsCallback.Call( { imageData } );
+        jsCallback.Call( { m_v8ObjectReference.Get("infraredBuffer") } );
         m_mInfraredReaderMutex.unlock();
       };
 
@@ -962,8 +962,7 @@ Napi::Value MethodOpenLongExposureInfraredReader(const Napi::CallbackInfo& info)
           return;
         }
         m_mLongExposureInfraredReaderMutex.lock();
-        Napi::Buffer<char> imageData = Napi::Buffer<char>::New(env, pixelsRef, cLongExposureInfraredWidth * cLongExposureInfraredHeight);
-        jsCallback.Call( { imageData } );
+        jsCallback.Call( { m_v8ObjectReference.Get("longExposureInfraredBuffer") } );
         m_mLongExposureInfraredReaderMutex.unlock();
       };
 
@@ -1065,8 +1064,7 @@ Napi::Value MethodOpenDepthReader(const Napi::CallbackInfo& info) {
           return;
         }
         m_mDepthReaderMutex.lock();
-        Napi::Buffer<char> imageData = Napi::Buffer<char>::New(env, pixelsRef, cDepthWidth * cDepthHeight);
-        jsCallback.Call( { imageData } );
+        jsCallback.Call( { m_v8ObjectReference.Get("depthPixelsBuffer") } );
         m_mDepthReaderMutex.unlock();
       };
 
@@ -1168,8 +1166,7 @@ Napi::Value MethodOpenRawDepthReader(const Napi::CallbackInfo& info) {
           return;
         }
         m_mRawDepthReaderMutex.lock();
-        Napi::Buffer<UINT16> imageData = Napi::Buffer<UINT16>::New(env, pixelsRef, cDepthWidth * cDepthHeight);
-        jsCallback.Call( { imageData } );
+        jsCallback.Call( { m_v8ObjectReference.Get("rawDepthValuesBuffer") } );
         m_mRawDepthReaderMutex.unlock();
       };
 
@@ -1444,10 +1441,8 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
 
         if(NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes)
         {
-          Napi::Buffer<RGBQUAD> v8ColorPixels = Napi::Buffer<RGBQUAD>::New(env, m_pColorPixelsV8, cColorWidth * cColorHeight);
-
           Napi::Object v8ColorResult = Napi::Object::New(env);
-          v8ColorResult.Set(Napi::String::New(env, "buffer"), v8ColorPixels);
+          v8ColorResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("colorBuffer"));
 
           //field of view
           v8ColorResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fColorHorizontalFieldOfViewV8));
@@ -1459,11 +1454,8 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
 
         if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
         {
-          //reuse the existing buffer
-          Napi::Buffer<char> v8DepthPixels = Napi::Buffer<char>::New(env, m_pDepthPixelsV8, cDepthWidth * cDepthHeight);
-
           Napi::Object v8DepthResult = Napi::Object::New(env);
-          v8DepthResult.Set(Napi::String::New(env, "buffer"), v8DepthPixels);
+          v8DepthResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("depthPixelsBuffer"));
 
           //field of view
           v8DepthResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfViewV8));
@@ -1475,10 +1467,8 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
 
         if(NodeKinect2FrameTypes::FrameTypes_RawDepth & m_enabledFrameTypes)
         {
-          Napi::Buffer<UINT16> v8RawDepthValues = Napi::Buffer<UINT16>::New(env, m_pRawDepthValuesV8, cDepthWidth * cDepthHeight);
-
           Napi::Object v8RawDepthResult = Napi::Object::New(env);
-          v8RawDepthResult.Set(Napi::String::New(env, "buffer"), v8RawDepthValues);
+          v8RawDepthResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("rawDepthBuffer"));
 
           //field of view
           v8RawDepthResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfViewV8));
@@ -1490,10 +1480,8 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
 
         if(NodeKinect2FrameTypes::FrameTypes_DepthColor & m_enabledFrameTypes)
         {
-          Napi::Buffer<char> v8DepthColorPixels = Napi::Buffer<char>::New(env, (char *)m_pDepthColorPixelsV8, cDepthWidth * cDepthHeight * sizeof(RGBQUAD));
-
           Napi::Object v8DepthColorResult = Napi::Object::New(env);
-          v8DepthColorResult.Set(Napi::String::New(env, "buffer"), v8DepthColorPixels);
+          v8DepthColorResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("depthColorPixelsBuffer"));
 
           v8Result.Set(Napi::String::New(env, "depthColor"), v8DepthColorResult);
         }
@@ -1510,13 +1498,13 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
           Napi::Object v8BodyIndexColorResult = Napi::Object::New(env);
 
           Napi::Array v8bodies = Napi::Array::New(env, BODY_COUNT);
+          Napi::Array bodyIndexColorPixelsBuffers = m_v8ObjectReference.Get("bodyIndexColorPixelsBuffers").As<Napi::Array>();
           for(int i = 0; i < BODY_COUNT; i++)
           {
             Napi::Object v8body = Napi::Object::New(env);
             v8body.Set(Napi::String::New(env, "bodyIndex"), Napi::Number::New(env, i));
             if(m_jsBodyFrameV8.bodies[i].hasPixels && m_trackPixelsForBodyIndexV8[i]) {
-              Napi::Buffer<RGBQUAD> v8ColorPixels = Napi::Buffer<RGBQUAD>::New(env, m_pBodyIndexColorPixelsV8[i], cColorWidth * cColorHeight);
-              v8body.Set(Napi::String::New(env, "buffer"), v8ColorPixels);
+              v8body.Set(Napi::String::New(env, "buffer"), bodyIndexColorPixelsBuffers.Get(i));
             }
             v8bodies.Set(i, v8body);
           }
@@ -1889,6 +1877,34 @@ Napi::Value MethodTrackPixelsForBodyIndices(const Napi::CallbackInfo& info) {
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   printf("[kinect2.cc] Init\n");
+
+  m_v8ObjectReference = Napi::Reference<Napi::Object>::New(Napi::Object::New(env), 1);
+
+  Napi::Buffer<RGBQUAD> colorBuffer = Napi::Buffer<RGBQUAD>::New(env, m_pColorPixelsV8, cColorWidth * cColorHeight);
+  m_v8ObjectReference.Set("colorBuffer", colorBuffer);
+  
+  Napi::Buffer<char> infraredBuffer = Napi::Buffer<char>::New(env, m_pInfraredPixelsV8, cInfraredWidth * cInfraredHeight);
+  m_v8ObjectReference.Set("infraredBuffer", infraredBuffer);
+  
+  Napi::Buffer<char> longExposureInfraredBuffer = Napi::Buffer<char>::New(env, m_pLongExposureInfraredPixelsV8, cLongExposureInfraredWidth * cLongExposureInfraredHeight);
+  m_v8ObjectReference.Set("longExposureInfraredBuffer", longExposureInfraredBuffer);
+
+  Napi::Buffer<char> depthPixelsBuffer = Napi::Buffer<char>::New(env, m_pDepthPixelsV8, cDepthWidth * cDepthHeight);
+  m_v8ObjectReference.Set("depthPixelsBuffer", depthPixelsBuffer);
+
+  Napi::Buffer<UINT16> rawDepthValuesBuffer = Napi::Buffer<UINT16>::New(env, m_pRawDepthValuesV8, cDepthWidth * cDepthHeight);
+  m_v8ObjectReference.Set("rawDepthValuesBuffer", rawDepthValuesBuffer);
+
+  Napi::Buffer<char> depthColorPixelsBuffer = Napi::Buffer<char>::New(env, (char *)m_pDepthColorPixelsV8, cDepthWidth * cDepthHeight * sizeof(RGBQUAD));
+  m_v8ObjectReference.Set("depthColorPixelsBuffer", depthColorPixelsBuffer);
+
+  Napi::Array bodyIndexColorPixelsBuffers = Napi::Array::New(env, BODY_COUNT);
+  for(int i = 0; i < BODY_COUNT; i++)
+  {
+    Napi::Buffer<RGBQUAD> bodyIndexColorPixelsBuffer = Napi::Buffer<RGBQUAD>::New(env, m_pBodyIndexColorPixelsV8[i], cColorWidth * cColorHeight);
+    bodyIndexColorPixelsBuffers.Set(i, bodyIndexColorPixelsBuffer);
+  }
+  m_v8ObjectReference.Set(Napi::String::New(env, "bodyIndexColorPixelsBuffers"), bodyIndexColorPixelsBuffers);
 
   exports.Set(Napi::String::New(env, "open"), Napi::Function::New(env, MethodOpen));
   exports.Set(Napi::String::New(env, "close"), Napi::Function::New(env, MethodClose));
