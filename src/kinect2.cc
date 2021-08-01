@@ -1468,7 +1468,7 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
         if(NodeKinect2FrameTypes::FrameTypes_RawDepth & m_enabledFrameTypes)
         {
           Napi::Object v8RawDepthResult = Napi::Object::New(env);
-          v8RawDepthResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("rawDepthBuffer"));
+          v8RawDepthResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("rawDepthValuesBuffer"));
 
           //field of view
           v8RawDepthResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfViewV8));
