@@ -36,51 +36,69 @@
           </div>
         </nav>
       </div>
-      <webview class="col pr-0" id="viewer" name="viewer" nodeintegration preload="./demo-preload.js">
-      </webview>
+      <div class="col pr-0" id="viewer"></div>
     </div>
     <script>
-    {
-      // show demo links in the webview
-      const $viewer = document.getElementById('viewer');
-      const demoLinks = Array.from(document.querySelectorAll('[target="viewer"]'));
-
-      const timeOut = ms => {
-        return new Promise(resolve => {
-          setTimeout(() => resolve(), ms);
-        });
-      };
-
-      const loadDemo = url => {
-        // show a preloader first, to allow some time for previous demo to shut down
-        let demoPromise = Promise.resolve();
-        if ($viewer.getWebContents) {
-          demoPromise = demoPromise.then(() => {
-            return new Promise((resolve) => {
-              const contents = $viewer.getWebContents();
-              contents.once('ipc-message', (event, channel) => {
-                // kinect is closed now, load the next demo
-                console.log(channel);
-                resolve();
-              });
-              contents.send('close-kinect');
-            });
+      {
+        const { remote } = require('electron');
+  
+        const $viewer = document.getElementById('viewer');
+        let webview = false;
+        const demoLinks = Array.from(document.querySelectorAll('[target="viewer"]'));
+  
+        const timeOut = ms => {
+          return new Promise(resolve => {
+            setTimeout(() => resolve(), ms);
           });
-        }
-        demoPromise.then(() => {
-          $viewer.src = url;
+        };
+  
+        const loadDemo = async url => {
+          const previousWebviewNeedsCleanup = (webview !== false);
+          if (previousWebviewNeedsCleanup) {
+            if (!webview.getWebContentsId) {
+              await new Promise((resolve) => {
+                const onDomReady = () => {
+                  resolve();
+                  webview.removeEventListener('dom-ready', onDomReady);
+                };
+                webview.addEventListener('dom-ready', onDomReady);
+              });
+            }
+            console.log("get web contents");
+            const webContents = remote.webContents.fromId(webview.getWebContentsId());
+            console.log(webContents);
+            if (webContents) {
+              await new Promise((resolve) => {
+                webContents.once('ipc-message', (event, channel) => {
+                  // kinect is closed now, load the next demo
+                  resolve();
+                });
+                webContents.send('close-kinect');
+              });
+            }
+            $viewer.removeChild(webview);
+            webview = false;
+          }
+  
+          webview = document.createElement('webview');
+          webview.style.width = '100%';
+          webview.style.height = '100%';
+          webview.setAttribute('nodeintegration', true);
+          webview.setAttribute('preload', './demo-preload.js');
+          $viewer.appendChild(webview);
+  
+          webview.src = url;
+        };
+  
+        loadDemo(demoLinks[0].href);
+  
+        demoLinks.forEach(link => {
+          link.addEventListener('click', e => {
+            e.preventDefault();
+            loadDemo(link.href);
+          });
         });
-      };
-
-      loadDemo(demoLinks[0].href);
-
-      demoLinks.forEach(link => {
-        link.addEventListener('click', e => {
-          e.preventDefault();
-          loadDemo(link.href);
-        });
-      });
-    }
-    </script>
+      }
+      </script>
   </body>
 </html>
