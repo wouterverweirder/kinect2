@@ -1,5 +1,7 @@
 # Kinect2 Library for Node / Electron
 
+[![npm](https://img.shields.io/node/v/kinect2.svg)](https://nodejs.org/en/)
+[![npm](https://img.shields.io/npm/v/kinect2.svg)](https://npmjs.org/package/kinect2)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=NUZP3U3QZEQV2&currency_code=EUR&source=url)
 
 This library enables you to use the Kinect v2 in your nodejs or electron apps.
