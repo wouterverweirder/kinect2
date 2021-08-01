@@ -1321,6 +1321,7 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
 
   // m_enabledFrameTypes = static_cast<unsigned long>(jsOptions.Get("frameTypes")).As<Napi::Number>()->Int32Value());
   m_enabledFrameTypes = jsOptions.Get("frameTypes").As<Napi::Number>().Int32Value();
+  printf("[kinect2.cc] m_enabledFrameTypes: %i\n", m_enabledFrameTypes);
 
   m_includeJointFloorData = false;
 
@@ -1383,6 +1384,8 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
     m_enabledFrameSourceTypes |= FrameSourceTypes::FrameSourceTypes_Audio;
   }
 
+  printf("[kinect2.cc] m_enabledFrameSourceTypes: %i\n", m_enabledFrameSourceTypes);
+
   HRESULT hr;
   hr = m_pKinectSensor->OpenMultiSourceFrameReader(m_enabledFrameSourceTypes, &m_pMultiSourceFrameReader);
   if (SUCCEEDED(hr))
@@ -1437,6 +1440,32 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
           v8DepthResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fDepthDiagonalFieldOfView));
 
           v8Result.Set(Napi::String::New(env, "depth"), v8DepthResult);
+        }
+
+        if(NodeKinect2FrameTypes::FrameTypes_Infrared & m_enabledFrameTypes)
+        {
+          Napi::Object v8InfraredResult = Napi::Object::New(env);
+          v8InfraredResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("infraredBuffer"));
+
+          //field of view
+          v8InfraredResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfView));
+          v8InfraredResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fDepthVerticalFieldOfView));
+          v8InfraredResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fDepthDiagonalFieldOfView));
+
+          v8Result.Set(Napi::String::New(env, "infrared"), v8InfraredResult);
+        }
+
+        if(NodeKinect2FrameTypes::FrameTypes_LongExposureInfrared & m_enabledFrameTypes)
+        {
+          Napi::Object v8LongExposureInfraredResult = Napi::Object::New(env);
+          v8LongExposureInfraredResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("longExposureInfraredBuffer"));
+
+          //field of view
+          v8LongExposureInfraredResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfView));
+          v8LongExposureInfraredResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fDepthVerticalFieldOfView));
+          v8LongExposureInfraredResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fDepthDiagonalFieldOfView));
+
+          v8Result.Set(Napi::String::New(env, "longExposureInfrared"), v8LongExposureInfraredResult);
         }
 
         if(NodeKinect2FrameTypes::FrameTypes_RawDepth & m_enabledFrameTypes)
@@ -1711,9 +1740,6 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
               }
             }
           }
-
-          //todo: infrared
-          //todo: long exposure infrared
 
           //release memory
           SafeRelease(pColorFrame);

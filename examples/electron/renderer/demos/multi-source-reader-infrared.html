@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Kinect2 Example</title>
+    <link rel="stylesheet" href="../assets/vendors/bootstrap-4.3.1-dist/css/bootstrap.css">
+    <link rel="stylesheet" href="../assets/vendors/bootstrap-4.3.1-dist/css/docs.min.css">
+  </head>
+  <body class="container-fluid py-3">
+    <div class="d-flex align-items-baseline justify-content-between">
+      <h1 class="bd-title">Multi Source Stream</h1>
+      <button onclick="require('electron').remote.getCurrentWebContents().openDevTools()">open dev tools</button>
+    </div>
+    <p>
+      This demo shows multiple streams.
+    </p>
+    
+    <div class="row mb-3">
+      <div class="col-7">
+        <p class="mb-1">Color image:</p>
+        <canvas id="rgbCanvas" width="1920" height="1080" class="img-fluid"></canvas>
+      </div>
+      <div class="col-5">
+        <p class="mb-1">Infrared image:</p>
+        <canvas id="depthCanvas" width="512" height="424" class="img-fluid"></canvas>
+      </div>
+    </div>
+    <button id="toggleFeedButton" disabled="disabled">Stop Video</button>
+    
+    <script>
+      {
+        const Kinect2 = require('kinect2');
+        const kinect = new Kinect2();
+
+        const $rgbCanvas = document.getElementById('rgbCanvas'),
+          rgbCtx = $rgbCanvas.getContext('2d'),
+          rgbImageData = rgbCtx.createImageData($rgbCanvas.width, $rgbCanvas.height);
+        
+        const $depthCanvas = document.getElementById('depthCanvas'),
+          depthCtx = $depthCanvas.getContext('2d'),
+          depthImageData = depthCtx.createImageData($depthCanvas.width, $depthCanvas.height);
+
+        const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
+
+        const $toggleFeedButton = document.getElementById('toggleFeedButton');
+
+        let feedOpen = false;
+
+        const init = () => {
+          startKinect();
+        };
+
+        const setFeedOpen = async (value) => {
+          if(value !== feedOpen) {
+            feedOpen = value;
+            if(feedOpen) {
+              kinect.openMultiSourceReader({
+                frameTypes: Kinect2.FrameType.color | Kinect2.FrameType.body | Kinect2.FrameType.infrared
+              });
+              $toggleFeedButton.textContent = 'Stop Video';
+            } else {
+              await kinect.closeMultiSourceReader();
+              $toggleFeedButton.textContent = 'Start Video';
+            }
+          }
+        }
+
+        const startKinect = () => {
+          if (kinect.open()) {
+            kinect.on('multiSourceFrame', (frame) => {
+              if (frame.color && frame.color.buffer) {
+                renderColorFrame(rgbCtx, rgbImageData, frame.color.buffer);
+              }
+              if (frame.infrared && frame.infrared.buffer) {
+                renderDepthFrame(depthCtx, depthImageData, frame.infrared.buffer);
+              }
+              if (frame.body) {
+                renderBodyFrame(rgbCtx, rgbCanvas, frame.body, true);
+                renderBodyFrame(depthCtx, depthCanvas, frame.body, false);
+              }
+            });
+
+            $toggleFeedButton.addEventListener('click', function(){
+              setFeedOpen(!feedOpen);
+            });
+
+            $toggleFeedButton.removeAttribute('disabled');
+
+            setFeedOpen(true);
+          }
+        };
+
+        const renderColorFrame = (ctx, canvasImageData, newPixelData) => {
+          const pixelArray = canvasImageData.data;
+          for (let i = 0; i < canvasImageData.data.length; i++) {
+            pixelArray[i] = newPixelData[i];
+          }
+          ctx.putImageData(canvasImageData, 0, 0);
+        };
+
+        const renderDepthFrame = (ctx, canvasImageData, newPixelData) => {
+          const pixelArray = canvasImageData.data;
+          let depthPixelIndex = 0;
+          for (let i = 0; i < canvasImageData.data.length; i+=4) {
+            pixelArray[i+0] = newPixelData[depthPixelIndex];
+            pixelArray[i+1] = newPixelData[depthPixelIndex];
+            pixelArray[i+2] = newPixelData[depthPixelIndex];
+            pixelArray[i+3] = 0xff;
+            depthPixelIndex++;
+          }
+          ctx.putImageData(canvasImageData, 0, 0);
+        };
+
+        const renderBodyFrame = (ctx, canvas, bodyFrame, isColor) => {
+          let index = 0;
+          bodyFrame.bodies.forEach((body) => {
+            if(body.tracked) {
+              for(const jointType in body.joints) {
+                const joint = body.joints[jointType];
+                if (joint.trackingState > Kinect2.TrackingState.notTracked) {
+                  ctx.fillStyle = colors[index];
+                  let size = 4;
+                  if (joint.trackingState === Kinect2.TrackingState.tracked) {
+                    size = 12;
+                  }
+                  if (isColor) {
+                    ctx.fillRect(joint.colorX * canvas.width - size / 2, joint.colorY * canvas.height - size / 2, size, size);
+                  } else {
+                    ctx.fillRect(joint.depthX * canvas.width - size / 2, joint.depthY * canvas.height - size / 2, size, size);
+                  }
+                }
+              }
+              index++;
+            }
+          });
+        };
+
+        // expose the kinect instance to the window object in this demo app to allow the parent window to close it between sessions
+        window.kinect = kinect;
+        init();
+      }
+    </script>
+  </body>
+</html>
