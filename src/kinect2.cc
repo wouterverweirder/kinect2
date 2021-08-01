@@ -19,25 +19,17 @@ IMultiSourceFrameReader*            m_pMultiSourceFrameReader = NULL;
 Napi::ObjectReference   m_v8ObjectReference;
 
 RGBQUAD*                m_pColorPixels = new RGBQUAD[cColorWidth * cColorHeight];
-RGBQUAD*                m_pColorPixelsV8 = new RGBQUAD[cColorWidth * cColorHeight];
 char*                   m_pInfraredPixels = new char[cInfraredWidth * cInfraredHeight];
-char*                   m_pInfraredPixelsV8 = new char[cInfraredWidth * cInfraredHeight];
 char*                   m_pLongExposureInfraredPixels = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
-char*                   m_pLongExposureInfraredPixelsV8 = new char[cLongExposureInfraredWidth * cLongExposureInfraredHeight];
 char*                   m_pDepthPixels = new char[cDepthWidth * cDepthHeight];
-char*                   m_pDepthPixelsV8 = new char[cDepthWidth * cDepthHeight];
 UINT16*                 m_pRawDepthValues = new UINT16[cDepthWidth * cDepthHeight];
-UINT16*                 m_pRawDepthValuesV8 = new UINT16[cDepthWidth * cDepthHeight];
 RGBQUAD*                m_pDepthColorPixels = new RGBQUAD[cDepthWidth * cDepthHeight];
-RGBQUAD*                m_pDepthColorPixelsV8 = new RGBQUAD[cDepthWidth * cDepthHeight];
 
 bool                    m_trackPixelsForBodyIndexV8[BODY_COUNT];
 
 RGBQUAD                 m_pBodyIndexColorPixels[BODY_COUNT][cColorWidth * cColorHeight];
-RGBQUAD                 m_pBodyIndexColorPixelsV8[BODY_COUNT][cColorWidth * cColorHeight];
 
 JSBodyFrame             m_jsBodyFrame;
-JSBodyFrame             m_jsBodyFrameV8;
 
 DepthSpacePoint*        m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
 ColorSpacePoint*        m_pColorCoordinatesForDepth = new ColorSpacePoint[cDepthWidth * cDepthHeight];
@@ -58,9 +50,6 @@ std::mutex                m_mColorThreadJoinedMutex;
 float                     m_fColorHorizontalFieldOfView;
 float                     m_fColorVerticalFieldOfView;
 float                     m_fColorDiagonalFieldOfView;
-float                     m_fColorHorizontalFieldOfViewV8;
-float                     m_fColorVerticalFieldOfViewV8;
-float                     m_fColorDiagonalFieldOfViewV8;
 
 // Infrared
 std::thread               m_tInfraredThread;
@@ -72,9 +61,6 @@ std::mutex                m_mInfraredThreadJoinedMutex;
 float                     m_fInfraredHorizontalFieldOfView;
 float                     m_fInfraredVerticalFieldOfView;
 float                     m_fInfraredDiagonalFieldOfView;
-float                     m_fInfraredHorizontalFieldOfViewV8;
-float                     m_fInfraredVerticalFieldOfViewV8;
-float                     m_fInfraredDiagonalFieldOfViewV8;
 
 // LongExposureInfrared
 std::thread               m_tLongExposureInfraredThread;
@@ -86,9 +72,6 @@ std::mutex                m_mLongExposureInfraredThreadJoinedMutex;
 float                     m_fLongExposureInfraredHorizontalFieldOfView;
 float                     m_fLongExposureInfraredVerticalFieldOfView;
 float                     m_fLongExposureInfraredDiagonalFieldOfView;
-float                     m_fLongExposureInfraredHorizontalFieldOfViewV8;
-float                     m_fLongExposureInfraredVerticalFieldOfViewV8;
-float                     m_fLongExposureInfraredDiagonalFieldOfViewV8;
 
 // Depth
 std::thread               m_tDepthThread;
@@ -100,9 +83,6 @@ std::mutex                m_mDepthThreadJoinedMutex;
 float                     m_fDepthHorizontalFieldOfView;
 float                     m_fDepthVerticalFieldOfView;
 float                     m_fDepthDiagonalFieldOfView;
-float                     m_fDepthHorizontalFieldOfViewV8;
-float                     m_fDepthVerticalFieldOfViewV8;
-float                     m_fDepthDiagonalFieldOfViewV8;
 
 // RawDepth
 std::thread               m_tRawDepthThread;
@@ -649,47 +629,47 @@ Napi::Object getV8BodyFrame(Napi::Env env, JSBodyFrame* bodyFrameRef)
     Napi::Object v8body = Napi::Object::New(env);
 
     v8body.Set(Napi::String::New(env, "bodyIndex"), Napi::Number::New(env, i));
-    v8body.Set(Napi::String::New(env, "tracked"), Napi::Boolean::New(env, m_jsBodyFrameV8.bodies[i].tracked));
-    if(m_jsBodyFrameV8.bodies[i].tracked)
+    v8body.Set(Napi::String::New(env, "tracked"), Napi::Boolean::New(env, m_jsBodyFrame.bodies[i].tracked));
+    if(m_jsBodyFrame.bodies[i].tracked)
     {
-      v8body.Set(Napi::String::New(env, "trackingId"), Napi::String::New(env, std::to_string(m_jsBodyFrameV8.bodies[i].trackingId)));
+      v8body.Set(Napi::String::New(env, "trackingId"), Napi::String::New(env, std::to_string(m_jsBodyFrame.bodies[i].trackingId)));
       //hand states
-      v8body.Set(Napi::String::New(env, "leftHandState"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].leftHandState));
-      v8body.Set(Napi::String::New(env, "rightHandState"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].rightHandState));
-      Napi::Array v8joints = Napi::Array::New(env, _countof(m_jsBodyFrameV8.bodies[i].joints));
+      v8body.Set(Napi::String::New(env, "leftHandState"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].leftHandState));
+      v8body.Set(Napi::String::New(env, "rightHandState"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].rightHandState));
+      Napi::Array v8joints = Napi::Array::New(env, _countof(m_jsBodyFrame.bodies[i].joints));
       //joints
-      for (int j = 0; j < _countof(m_jsBodyFrameV8.bodies[i].joints); ++j)
+      for (int j = 0; j < _countof(m_jsBodyFrame.bodies[i].joints); ++j)
       {
         Napi::Object v8joint = Napi::Object::New(env);
-        v8joint.Set(Napi::String::New(env, "depthX"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].depthX));
-        v8joint.Set(Napi::String::New(env, "depthY"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].depthY));
-        v8joint.Set(Napi::String::New(env, "colorX"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].colorX));
-        v8joint.Set(Napi::String::New(env, "colorY"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].colorY));
-        v8joint.Set(Napi::String::New(env, "cameraX"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].cameraX));
-        v8joint.Set(Napi::String::New(env, "cameraY"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].cameraY));
-        v8joint.Set(Napi::String::New(env, "cameraZ"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].cameraZ));
+        v8joint.Set(Napi::String::New(env, "depthX"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].depthX));
+        v8joint.Set(Napi::String::New(env, "depthY"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].depthY));
+        v8joint.Set(Napi::String::New(env, "colorX"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].colorX));
+        v8joint.Set(Napi::String::New(env, "colorY"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].colorY));
+        v8joint.Set(Napi::String::New(env, "cameraX"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].cameraX));
+        v8joint.Set(Napi::String::New(env, "cameraY"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].cameraY));
+        v8joint.Set(Napi::String::New(env, "cameraZ"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].cameraZ));
         //orientation
-        v8joint.Set(Napi::String::New(env, "orientationX"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].orientationX));
-        v8joint.Set(Napi::String::New(env, "orientationY"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].orientationY));
-        v8joint.Set(Napi::String::New(env, "orientationZ"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].orientationZ));
-        v8joint.Set(Napi::String::New(env, "orientationW"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].orientationW));
+        v8joint.Set(Napi::String::New(env, "orientationX"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].orientationX));
+        v8joint.Set(Napi::String::New(env, "orientationY"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].orientationY));
+        v8joint.Set(Napi::String::New(env, "orientationZ"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].orientationZ));
+        v8joint.Set(Napi::String::New(env, "orientationW"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].orientationW));
         //body ground
-        if(m_jsBodyFrameV8.bodies[i].joints[j].hasFloorData)
+        if(m_jsBodyFrame.bodies[i].joints[j].hasFloorData)
         {
-          v8joint.Set(Napi::String::New(env, "floorDepthX"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].floorDepthX));
-          v8joint.Set(Napi::String::New(env, "floorDepthY"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].floorDepthY));
-          v8joint.Set(Napi::String::New(env, "floorColorX"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].floorColorX));
-          v8joint.Set(Napi::String::New(env, "floorColorY"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].floorColorY));
-          v8joint.Set(Napi::String::New(env, "floorCameraX"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].floorCameraX));
-          v8joint.Set(Napi::String::New(env, "floorCameraY"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].floorCameraY));
-          v8joint.Set(Napi::String::New(env, "floorCameraZ"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].floorCameraZ));
+          v8joint.Set(Napi::String::New(env, "floorDepthX"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].floorDepthX));
+          v8joint.Set(Napi::String::New(env, "floorDepthY"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].floorDepthY));
+          v8joint.Set(Napi::String::New(env, "floorColorX"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].floorColorX));
+          v8joint.Set(Napi::String::New(env, "floorColorY"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].floorColorY));
+          v8joint.Set(Napi::String::New(env, "floorCameraX"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].floorCameraX));
+          v8joint.Set(Napi::String::New(env, "floorCameraY"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].floorCameraY));
+          v8joint.Set(Napi::String::New(env, "floorCameraZ"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].floorCameraZ));
         }
         //joint type
-        v8joint.Set(Napi::String::New(env, "jointType"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].jointType));
+        v8joint.Set(Napi::String::New(env, "jointType"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].jointType));
         //tracking state
-        v8joint.Set(Napi::String::New(env, "trackingState"), Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].trackingState));
+        v8joint.Set(Napi::String::New(env, "trackingState"), Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].trackingState));
         //insert in array
-        v8joints.Set(Napi::Number::New(env, m_jsBodyFrameV8.bodies[i].joints[j].jointType), v8joint);
+        v8joints.Set(Napi::Number::New(env, m_jsBodyFrame.bodies[i].joints[j].jointType), v8joint);
       }
       v8body.Set(Napi::String::New(env, "joints"), v8joints);
     }
@@ -698,12 +678,12 @@ Napi::Object getV8BodyFrame(Napi::Env env, JSBodyFrame* bodyFrameRef)
   v8BodyResult.Set(Napi::String::New(env, "bodies"), v8bodies);
 
   //floor plane
-  if(m_jsBodyFrameV8.hasFloorClipPlane) {
+  if(m_jsBodyFrame.hasFloorClipPlane) {
     Napi::Object v8FloorClipPlane = Napi::Object::New(env);
-    v8FloorClipPlane.Set(Napi::String::New(env, "x"), Napi::Number::New(env, m_jsBodyFrameV8.floorClipPlaneX));
-    v8FloorClipPlane.Set(Napi::String::New(env, "y"), Napi::Number::New(env, m_jsBodyFrameV8.floorClipPlaneY));
-    v8FloorClipPlane.Set(Napi::String::New(env, "z"), Napi::Number::New(env, m_jsBodyFrameV8.floorClipPlaneZ));
-    v8FloorClipPlane.Set(Napi::String::New(env, "w"), Napi::Number::New(env, m_jsBodyFrameV8.floorClipPlaneW));
+    v8FloorClipPlane.Set(Napi::String::New(env, "x"), Napi::Number::New(env, m_jsBodyFrame.floorClipPlaneX));
+    v8FloorClipPlane.Set(Napi::String::New(env, "y"), Napi::Number::New(env, m_jsBodyFrame.floorClipPlaneY));
+    v8FloorClipPlane.Set(Napi::String::New(env, "z"), Napi::Number::New(env, m_jsBodyFrame.floorClipPlaneZ));
+    v8FloorClipPlane.Set(Napi::String::New(env, "w"), Napi::Number::New(env, m_jsBodyFrame.floorClipPlaneW));
     v8BodyResult.Set(Napi::String::New(env, "floorClipPlane"), v8FloorClipPlane);
   }
 
@@ -771,7 +751,6 @@ Napi::Value MethodOpenColorReader(const Napi::CallbackInfo& info) {
         if (SUCCEEDED(hr))
         {
           processColorFrameData(pColorFrame);
-          memcpy(m_pColorPixelsV8, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
         }
         if (!m_bColorThreadRunning)
         {
@@ -781,7 +760,7 @@ Napi::Value MethodOpenColorReader(const Napi::CallbackInfo& info) {
         m_mColorReaderMutex.unlock();
         if (SUCCEEDED(hr))
         {
-          napi_status status = m_tsfnColor.BlockingCall( m_pColorPixelsV8, callback );
+          napi_status status = m_tsfnColor.BlockingCall( m_pColorPixels, callback );
           if ( status != napi_ok )
           {
             break;
@@ -873,7 +852,6 @@ Napi::Value MethodOpenInfraredReader(const Napi::CallbackInfo& info) {
         if (SUCCEEDED(hr))
         {
           processInfraredFrameData(pInfraredFrame);
-          memcpy(m_pInfraredPixelsV8, m_pInfraredPixels, cInfraredWidth * cInfraredHeight * sizeof(char));
         }
         if (!m_bInfraredThreadRunning)
         {
@@ -883,7 +861,7 @@ Napi::Value MethodOpenInfraredReader(const Napi::CallbackInfo& info) {
         m_mInfraredReaderMutex.unlock();
         if (SUCCEEDED(hr))
         {
-          napi_status status = m_tsfnInfrared.BlockingCall( m_pInfraredPixelsV8, callback );
+          napi_status status = m_tsfnInfrared.BlockingCall( m_pInfraredPixels, callback );
           if ( status != napi_ok )
           {
             break;
@@ -975,7 +953,6 @@ Napi::Value MethodOpenLongExposureInfraredReader(const Napi::CallbackInfo& info)
         if (SUCCEEDED(hr))
         {
           processLongExposureInfraredFrameData(pLongExposureInfraredFrame);
-          memcpy(m_pLongExposureInfraredPixelsV8, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight * sizeof(char));
         }
         if (!m_bLongExposureInfraredThreadRunning)
         {
@@ -985,7 +962,7 @@ Napi::Value MethodOpenLongExposureInfraredReader(const Napi::CallbackInfo& info)
         m_mLongExposureInfraredReaderMutex.unlock();
         if (SUCCEEDED(hr))
         {
-          napi_status status = m_tsfnLongExposureInfrared.BlockingCall( m_pLongExposureInfraredPixelsV8, callback );
+          napi_status status = m_tsfnLongExposureInfrared.BlockingCall( m_pLongExposureInfraredPixels, callback );
           if ( status != napi_ok )
           {
             break;
@@ -1077,7 +1054,6 @@ Napi::Value MethodOpenDepthReader(const Napi::CallbackInfo& info) {
         if (SUCCEEDED(hr))
         {
           processDepthFrameData(pDepthFrame);
-          memcpy(m_pDepthPixelsV8, m_pDepthPixels, cDepthWidth * cDepthHeight * sizeof(char));
         }
         if (!m_bDepthThreadRunning)
         {
@@ -1087,7 +1063,7 @@ Napi::Value MethodOpenDepthReader(const Napi::CallbackInfo& info) {
         m_mDepthReaderMutex.unlock();
         if (SUCCEEDED(hr))
         {
-          napi_status status = m_tsfnDepth.BlockingCall( m_pDepthPixelsV8, callback );
+          napi_status status = m_tsfnDepth.BlockingCall( m_pDepthPixels, callback );
           if ( status != napi_ok )
           {
             break;
@@ -1179,7 +1155,6 @@ Napi::Value MethodOpenRawDepthReader(const Napi::CallbackInfo& info) {
         if (SUCCEEDED(hr))
         {
           processRawDepthFrameData(pDepthFrame);
-          memcpy(m_pRawDepthValuesV8, m_pRawDepthValues, cDepthWidth * cDepthHeight * sizeof(UINT16));
         }
         if (!m_bRawDepthThreadRunning)
         {
@@ -1189,7 +1164,7 @@ Napi::Value MethodOpenRawDepthReader(const Napi::CallbackInfo& info) {
         m_mRawDepthReaderMutex.unlock();
         if (SUCCEEDED(hr))
         {
-          napi_status status = m_tsfnRawDepth.BlockingCall( m_pRawDepthValuesV8, callback );
+          napi_status status = m_tsfnRawDepth.BlockingCall( m_pRawDepthValues, callback );
           if ( status != napi_ok )
           {
             break;
@@ -1269,7 +1244,7 @@ Napi::Value MethodOpenBodyReader(const Napi::CallbackInfo& info) {
         }
         m_mBodyReaderMutex.lock();
 
-        Napi::Object v8BodyResult = getV8BodyFrame(env, &m_jsBodyFrameV8);
+        Napi::Object v8BodyResult = getV8BodyFrame(env, &m_jsBodyFrame);
 
         jsCallback.Call( { v8BodyResult } );
         m_mBodyReaderMutex.unlock();
@@ -1284,7 +1259,6 @@ Napi::Value MethodOpenBodyReader(const Napi::CallbackInfo& info) {
         if (SUCCEEDED(hr))
         {
           processBodyFrameData(pBodyFrame);
-          memcpy(&m_jsBodyFrameV8, &m_jsBodyFrame, sizeof(JSBodyFrame));
         }
         if (!m_bBodyThreadRunning)
         {
@@ -1445,9 +1419,9 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
           v8ColorResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("colorBuffer"));
 
           //field of view
-          v8ColorResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fColorHorizontalFieldOfViewV8));
-          v8ColorResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fColorVerticalFieldOfViewV8));
-          v8ColorResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fColorDiagonalFieldOfViewV8));
+          v8ColorResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fColorHorizontalFieldOfView));
+          v8ColorResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fColorVerticalFieldOfView));
+          v8ColorResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fColorDiagonalFieldOfView));
 
           v8Result.Set(Napi::String::New(env, "color"), v8ColorResult);
         }
@@ -1458,9 +1432,9 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
           v8DepthResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("depthPixelsBuffer"));
 
           //field of view
-          v8DepthResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfViewV8));
-          v8DepthResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fDepthVerticalFieldOfViewV8));
-          v8DepthResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fDepthDiagonalFieldOfViewV8));
+          v8DepthResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfView));
+          v8DepthResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fDepthVerticalFieldOfView));
+          v8DepthResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fDepthDiagonalFieldOfView));
 
           v8Result.Set(Napi::String::New(env, "depth"), v8DepthResult);
         }
@@ -1471,9 +1445,9 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
           v8RawDepthResult.Set(Napi::String::New(env, "buffer"), m_v8ObjectReference.Get("rawDepthValuesBuffer"));
 
           //field of view
-          v8RawDepthResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfViewV8));
-          v8RawDepthResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fDepthVerticalFieldOfViewV8));
-          v8RawDepthResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fDepthDiagonalFieldOfViewV8));
+          v8RawDepthResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fDepthHorizontalFieldOfView));
+          v8RawDepthResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fDepthVerticalFieldOfView));
+          v8RawDepthResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fDepthDiagonalFieldOfView));
 
           v8Result.Set(Napi::String::New(env, "rawDepth"), v8RawDepthResult);
         }
@@ -1488,7 +1462,7 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
 
         if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
         {
-          Napi::Object v8BodyResult = getV8BodyFrame(env, &m_jsBodyFrameV8);
+          Napi::Object v8BodyResult = getV8BodyFrame(env, &m_jsBodyFrame);
 
           v8Result.Set(Napi::String::New(env, "body"), v8BodyResult);
         }
@@ -1503,7 +1477,7 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
           {
             Napi::Object v8body = Napi::Object::New(env);
             v8body.Set(Napi::String::New(env, "bodyIndex"), Napi::Number::New(env, i));
-            if(m_jsBodyFrameV8.bodies[i].hasPixels && m_trackPixelsForBodyIndexV8[i]) {
+            if(m_jsBodyFrame.bodies[i].hasPixels && m_trackPixelsForBodyIndexV8[i]) {
               v8body.Set(Napi::String::New(env, "buffer"), bodyIndexColorPixelsBuffers.Get(i));
             }
             v8bodies.Set(i, v8body);
@@ -1511,9 +1485,9 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
           v8BodyIndexColorResult.Set(Napi::String::New(env, "bodies"), v8bodies);
 
           //field of view pf color camera
-          v8BodyIndexColorResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fColorHorizontalFieldOfViewV8));
-          v8BodyIndexColorResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fColorVerticalFieldOfViewV8));
-          v8BodyIndexColorResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fColorDiagonalFieldOfViewV8));
+          v8BodyIndexColorResult.Set(Napi::String::New(env, "horizontalFieldOfView"), Napi::Number::New(env, m_fColorHorizontalFieldOfView));
+          v8BodyIndexColorResult.Set(Napi::String::New(env, "verticalFieldOfView"), Napi::Number::New(env, m_fColorVerticalFieldOfView));
+          v8BodyIndexColorResult.Set(Napi::String::New(env, "diagonalFieldOfView"), Napi::Number::New(env, m_fColorDiagonalFieldOfView));
 
           v8Result.Set(Napi::String::New(env, "bodyIndexColor"), v8BodyIndexColorResult);
         }
@@ -1761,49 +1735,6 @@ Napi::Value MethodOpenMultiSourceReader(const Napi::CallbackInfo& info) {
           SafeRelease(pBodyFrame);
           SafeRelease(pBodyFrameReference);
         }
-        if (SUCCEEDED(hr))
-        {
-          //field of views are also included in body index pixel frames, so always set them
-          m_fColorHorizontalFieldOfViewV8 = m_fColorHorizontalFieldOfView;
-          m_fColorVerticalFieldOfViewV8 = m_fColorVerticalFieldOfView;
-          m_fColorDiagonalFieldOfViewV8 = m_fColorDiagonalFieldOfView;
-          m_fDepthHorizontalFieldOfViewV8 = m_fDepthHorizontalFieldOfView;
-          m_fDepthVerticalFieldOfViewV8 = m_fDepthVerticalFieldOfView;
-          m_fDepthDiagonalFieldOfViewV8 = m_fDepthDiagonalFieldOfView;
-          if(NodeKinect2FrameTypes::FrameTypes_Color & m_enabledFrameTypes)
-          {
-            //copy into buffer for V8
-            memcpy(m_pColorPixelsV8, m_pColorPixels, cColorWidth * cColorHeight * sizeof(RGBQUAD));
-          }
-          //depth image
-          if(NodeKinect2FrameTypes::FrameTypes_Depth & m_enabledFrameTypes)
-          {
-            //copy into buffer for V8
-            memcpy(m_pDepthPixelsV8, m_pDepthPixels, cDepthWidth * cDepthHeight);
-          }
-          //raw depth
-          if(NodeKinect2FrameTypes::FrameTypes_RawDepth & m_enabledFrameTypes)
-          {
-            //copy into buffer for V8
-            memcpy(m_pRawDepthValuesV8, m_pRawDepthValues, cDepthWidth * cDepthHeight * sizeof(UINT16));
-          }
-          //depth colors
-          if(NodeKinect2FrameTypes::FrameTypes_DepthColor & m_enabledFrameTypes)
-          {
-            //copy into buffer for V8
-            memcpy(m_pDepthColorPixelsV8, m_pDepthColorPixels, cDepthWidth * cDepthHeight * sizeof(RGBQUAD));
-          }
-          if(NodeKinect2FrameTypes::FrameTypes_Body & m_enabledFrameTypes)
-          {
-            //copy into object for V8
-            memcpy(&m_jsBodyFrameV8, &m_jsBodyFrame, sizeof(JSBodyFrame));
-          }
-          if(NodeKinect2FrameTypes::FrameTypes_BodyIndexColor & m_enabledFrameTypes)
-          {
-            //copy into object for V8
-            memcpy(m_pBodyIndexColorPixelsV8, m_pBodyIndexColorPixels, BODY_COUNT * cColorWidth * cColorHeight * sizeof(RGBQUAD));
-          }
-        }
         if (!m_bMultiSourceThreadRunning)
         {
           m_mMultiSourceReaderMutex.unlock();
@@ -1880,28 +1811,28 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   m_v8ObjectReference = Napi::Reference<Napi::Object>::New(Napi::Object::New(env), 1);
 
-  Napi::Buffer<RGBQUAD> colorBuffer = Napi::Buffer<RGBQUAD>::New(env, m_pColorPixelsV8, cColorWidth * cColorHeight);
+  Napi::Buffer<RGBQUAD> colorBuffer = Napi::Buffer<RGBQUAD>::New(env, m_pColorPixels, cColorWidth * cColorHeight);
   m_v8ObjectReference.Set("colorBuffer", colorBuffer);
   
-  Napi::Buffer<char> infraredBuffer = Napi::Buffer<char>::New(env, m_pInfraredPixelsV8, cInfraredWidth * cInfraredHeight);
+  Napi::Buffer<char> infraredBuffer = Napi::Buffer<char>::New(env, m_pInfraredPixels, cInfraredWidth * cInfraredHeight);
   m_v8ObjectReference.Set("infraredBuffer", infraredBuffer);
   
-  Napi::Buffer<char> longExposureInfraredBuffer = Napi::Buffer<char>::New(env, m_pLongExposureInfraredPixelsV8, cLongExposureInfraredWidth * cLongExposureInfraredHeight);
+  Napi::Buffer<char> longExposureInfraredBuffer = Napi::Buffer<char>::New(env, m_pLongExposureInfraredPixels, cLongExposureInfraredWidth * cLongExposureInfraredHeight);
   m_v8ObjectReference.Set("longExposureInfraredBuffer", longExposureInfraredBuffer);
 
-  Napi::Buffer<char> depthPixelsBuffer = Napi::Buffer<char>::New(env, m_pDepthPixelsV8, cDepthWidth * cDepthHeight);
+  Napi::Buffer<char> depthPixelsBuffer = Napi::Buffer<char>::New(env, m_pDepthPixels, cDepthWidth * cDepthHeight);
   m_v8ObjectReference.Set("depthPixelsBuffer", depthPixelsBuffer);
 
-  Napi::Buffer<UINT16> rawDepthValuesBuffer = Napi::Buffer<UINT16>::New(env, m_pRawDepthValuesV8, cDepthWidth * cDepthHeight);
+  Napi::Buffer<UINT16> rawDepthValuesBuffer = Napi::Buffer<UINT16>::New(env, m_pRawDepthValues, cDepthWidth * cDepthHeight);
   m_v8ObjectReference.Set("rawDepthValuesBuffer", rawDepthValuesBuffer);
 
-  Napi::Buffer<char> depthColorPixelsBuffer = Napi::Buffer<char>::New(env, (char *)m_pDepthColorPixelsV8, cDepthWidth * cDepthHeight * sizeof(RGBQUAD));
+  Napi::Buffer<char> depthColorPixelsBuffer = Napi::Buffer<char>::New(env, (char *)m_pDepthColorPixels, cDepthWidth * cDepthHeight * sizeof(RGBQUAD));
   m_v8ObjectReference.Set("depthColorPixelsBuffer", depthColorPixelsBuffer);
 
   Napi::Array bodyIndexColorPixelsBuffers = Napi::Array::New(env, BODY_COUNT);
   for(int i = 0; i < BODY_COUNT; i++)
   {
-    Napi::Buffer<RGBQUAD> bodyIndexColorPixelsBuffer = Napi::Buffer<RGBQUAD>::New(env, m_pBodyIndexColorPixelsV8[i], cColorWidth * cColorHeight);
+    Napi::Buffer<RGBQUAD> bodyIndexColorPixelsBuffer = Napi::Buffer<RGBQUAD>::New(env, m_pBodyIndexColorPixels[i], cColorWidth * cColorHeight);
     bodyIndexColorPixelsBuffers.Set(i, bodyIndexColorPixelsBuffer);
   }
   m_v8ObjectReference.Set(Napi::String::New(env, "bodyIndexColorPixelsBuffers"), bodyIndexColorPixelsBuffers);

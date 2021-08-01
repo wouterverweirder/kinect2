@@ -3,6 +3,10 @@ const kinect = new Kinect2();
 
 if(kinect.open()) {
   console.log("Kinect Opened");
+  // kinect.on('colorFrame', (frame) => {
+  //   console.log(frame);
+  // });
+  // kinect.openColorReader();
   kinect.openMultiSourceReader({ frameTypes: Kinect2.FrameType.color | Kinect2.FrameType.depth | Kinect2.FrameType.body });
   console.log("started multi source reader");
 
@@ -14,13 +18,13 @@ if(kinect.open()) {
 
     console.log(`color: ${hasColorInfo}, depth: ${hasDepthInfo}, body: ${hasBodyInfo}`);
 
-    if (hasAllInfo) {
-      console.log("close multi source reader");
-      kinect.closeMultiSourceReader(() => {
-        console.log("stopped multi source reader");
-        kinect.close();
-      });
-    }
+    // if (hasAllInfo) {
+    //   console.log("close multi source reader");
+    //   kinect.closeMultiSourceReader(() => {
+    //     console.log("stopped multi source reader");
+    //     kinect.close();
+    //   });
+    // }
   });
   
 }
